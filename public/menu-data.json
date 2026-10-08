@@ -1,0 +1,66 @@
+[
+  {
+    "id": "kitfo",
+    "name": "Kitfo",
+    "category": "Traditional",
+    "price": 450,
+    "description": "Minced beef seasoned with Ethiopian spices and clarified butter.",
+    "image": "/images/kitfo.jpg"
+  },
+  {
+    "id": "doro-wot",
+    "name": "Doro Wot",
+    "category": "Traditional",
+    "price": 500,
+    "description": "Spicy Ethiopian chicken stew served with injera.",
+    "image": "/images/doro_wat.jpg"
+  },
+  {
+    "id": "beef-tibs",
+    "name": "Beef Tibs",
+    "category": "Traditional",
+    "price": 420,
+    "description": "Tender beef sautéed with onions, peppers, tomatoes, and Ethiopian spices.",
+    "image": "/images/shekla-tibs.jpg"
+  },
+  {
+    "id": "shiro",
+    "name": "Shiro",
+    "category": "Vegetarian",
+    "price": 280,
+    "description": "Smooth chickpea stew prepared with Ethiopian spices.",
+    "image": "/images/shiro_Tegabino.jpg"
+  },
+  {
+    "id": "beyaynetu",
+    "name": "Vegetable Beyaynetu",
+    "category": "Vegetarian",
+    "price": 350,
+    "description": "A colorful combination of Ethiopian vegetarian dishes served with injera.",
+    "image": "/images/beyaynetu.jpg"
+  },
+  {
+    "id": "firfir",
+    "name": "Firfir",
+    "category": "Breakfast",
+    "price": 250,
+    "description": "Torn injera mixed with spicy berbere sauce and seasoned butter.",
+    "image": "/images/quanta-firfir.jpg"
+  },
+  {
+    "id": "chechebsa",
+    "name": "Chechebsa",
+    "category": "Breakfast",
+    "price": 220,
+    "description": "Shredded flatbread mixed with honey and spiced butter.",
+    "image": "/images/chechebsa.jpg"
+  },
+  {
+    "id": "ethiopian-coffee",
+    "name": "Ethiopian Coffee",
+    "category": "Drinks",
+    "price": 120,
+    "description": "Freshly roasted Ethiopian coffee prepared in the traditional style.",
+    "image": "/images/coffee.jpg"
+  }
+]
