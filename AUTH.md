@@ -19,15 +19,14 @@ when `NODE_ENV` is production. `SESSION_SECRET` must be at least 32
 characters; `.env.example` documents the variable without containing a
 secret. Middleware verifies the signature with Web Crypto.
 
-For Vercel, set `SESSION_SECRET` to a unique random value of at least 32
-characters and set `NEXT_PUBLIC_SITE_URL` to the deployed site's HTTPS
-origin. Vercel's function filesystem is not writable at the project root,
-so the SQLite fallback uses the function's temporary directory; set
-`ADDIS_EATS_DB_PATH=/tmp/addis-eats.sqlite` to make that choice explicit.
-Temporary storage is not durable or shared between serverless instances.
-This SQLite demo therefore does not provide reliable cross-instance order
-persistence on Vercel; use a shared managed database before relying on
-production orders.
+For Vercel, provision a managed PostgreSQL database and configure its
+connection string as `POSTGRES_URL` (or `DATABASE_URL`). The app creates
+its tables and seeds the demo accounts on first use. Also set
+`SESSION_SECRET` to a unique random value of at least 32 characters and
+`NEXT_PUBLIC_SITE_URL` to the deployed site's HTTPS origin. SQLite remains
+the local-development fallback; its file storage is not suitable for
+Vercel's ephemeral, per-instance filesystem. Existing data in a previous
+SQLite file is not automatically migrated to PostgreSQL.
 
 `getSession()` is the server-side helper used by pages, route handlers,
 and Server Actions. Logout deletes the cookie. Sessions are not stored in

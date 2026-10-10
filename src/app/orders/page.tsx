@@ -16,7 +16,7 @@ export default async function OrdersPage() {
     redirect("/signin?next=%2Forders");
   }
 
-  const orders = getOrdersForUser(session.userId);
+  const orders = await getOrdersForUser(session.userId);
 
   return (
     <main className="min-h-screen bg-gray-50 px-6 py-10">

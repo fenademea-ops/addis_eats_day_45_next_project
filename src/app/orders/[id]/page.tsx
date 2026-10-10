@@ -21,7 +21,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
   }
 
   const { id } = await params;
-  const order = getOrderForUser(session.userId, id);
+  const order = await getOrderForUser(session.userId, id);
   if (!order) {
     notFound();
   }

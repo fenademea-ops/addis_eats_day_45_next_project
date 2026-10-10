@@ -3,7 +3,7 @@
 import { scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getDatabase } from "@/lib/db";
+import { query } from "@/lib/db";
 import {
   createSessionToken,
   SESSION_COOKIE_NAME,
@@ -31,21 +31,19 @@ export async function signInAction(
     return { error: "Enter a valid email and password." };
   }
 
-  const user = getDatabase()
-    .prepare(
-      `SELECT id, email, name, role, password_salt, password_hash
-       FROM users WHERE email = ?`
-    )
-    .get(email) as
-    | {
-        id: string;
-        email: string;
-        name: string;
-        role: "customer" | "staff";
-        password_salt: string;
-        password_hash: string;
-      }
-    | undefined;
+  const { rows } = await query<{
+    id: string;
+    email: string;
+    name: string;
+    role: "customer" | "staff";
+    password_salt: string;
+    password_hash: string;
+  }>(
+    `SELECT id, email, name, role, password_salt, password_hash
+     FROM users WHERE email = ?`,
+    [email]
+  );
+  const user = rows[0];
 
   if (!user) {
     return { error: "Email or password is incorrect." };

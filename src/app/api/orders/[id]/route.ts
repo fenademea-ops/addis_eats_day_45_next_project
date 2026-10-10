@@ -22,7 +22,7 @@ export async function GET(
   }
 
   const { id } = await params;
-  const order = getOrderForUser(session.userId, id);
+  const order = await getOrderForUser(session.userId, id);
   if (!order) {
     return NextResponse.json(
       { error: "Order not found." },
@@ -46,7 +46,7 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  if (!cancelOrderForUser(session.userId, id)) {
+  if (!(await cancelOrderForUser(session.userId, id))) {
     return NextResponse.json(
       { error: "Order not found or it can no longer be cancelled." },
       { status: 404 }

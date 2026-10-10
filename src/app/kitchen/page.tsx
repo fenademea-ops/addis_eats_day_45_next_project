@@ -19,7 +19,7 @@ export default async function KitchenPage() {
     notFound();
   }
 
-  const orders = getAllOrdersForStaff();
+  const orders = await getAllOrdersForStaff();
 
   return (
     <main className="min-h-screen bg-gray-50 px-6 py-10">

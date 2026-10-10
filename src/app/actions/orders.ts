@@ -56,7 +56,7 @@ export async function cancelOrder(orderId: string) {
     return { success: false, error: "Authentication required." };
   }
 
-  const success = cancelOrderForUser(session.userId, orderId);
+  const success = await cancelOrderForUser(session.userId, orderId);
   if (!success) {
     return {
       success: false,
@@ -110,7 +110,7 @@ export async function updateKitchenOrderAction(
     return { error: "Choose a valid order status." };
   }
 
-  if (!updateOrderStatus(orderId, status)) {
+  if (!(await updateOrderStatus(orderId, status))) {
     return { error: "Order not found or status cannot be changed." };
   }
 

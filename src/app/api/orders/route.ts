@@ -16,7 +16,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    items: getOrdersForUser(session.userId),
+    items: await getOrdersForUser(session.userId),
   });
 }
 
