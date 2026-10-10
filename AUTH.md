@@ -23,7 +23,11 @@ For Vercel, provision a managed PostgreSQL database and configure its
 connection string as `POSTGRES_URL` (or `DATABASE_URL`). The app creates
 its tables and seeds the demo accounts on first use. Also set
 `SESSION_SECRET` to a unique random value of at least 32 characters and
-`NEXT_PUBLIC_SITE_URL` to the deployed site's HTTPS origin. SQLite remains
+`NEXT_PUBLIC_SITE_URL` to `https://addis-eats-day-45-next-project.vercel.app`
+(or the canonical HTTPS origin for your deployment). This origin is used
+for canonical URLs, Open Graph metadata, robots, and sitemap links. If it
+is unset on Vercel, the app falls back to Vercel's production hostname.
+SQLite remains
 the local-development fallback; its file storage is not suitable for
 Vercel's ephemeral, per-instance filesystem. Existing data in a previous
 SQLite file is not automatically migrated to PostgreSQL.

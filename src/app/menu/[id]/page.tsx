@@ -3,10 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDishById } from "@/lib/data";
+import { siteUrl } from "@/lib/site-url";
 import AddToCartButton from "./AddToCartButton";
-
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 type DishPageProps = {
   params: Promise<{

@@ -1,8 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getDishes } from "@/lib/data";
-
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+import { siteUrl } from "@/lib/site-url";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const dishes = await getDishes();
