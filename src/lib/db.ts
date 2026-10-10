@@ -1,6 +1,7 @@
 import "server-only";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 const demoUsers = [
@@ -32,7 +33,9 @@ export function getDatabase(): Database.Database {
   if (!globalDatabase.addisEatsDatabase) {
     const databasePath =
       process.env.ADDIS_EATS_DB_PATH ??
-      path.join(process.cwd(), "data", "addis-eats.sqlite");
+      (process.env.VERCEL
+        ? path.join(tmpdir(), "addis-eats.sqlite")
+        : path.join(process.cwd(), "data", "addis-eats.sqlite"));
     mkdirSync(path.dirname(databasePath), { recursive: true });
 
     const database = new Database(databasePath);

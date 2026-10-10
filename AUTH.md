@@ -19,6 +19,16 @@ when `NODE_ENV` is production. `SESSION_SECRET` must be at least 32
 characters; `.env.example` documents the variable without containing a
 secret. Middleware verifies the signature with Web Crypto.
 
+For Vercel, set `SESSION_SECRET` to a unique random value of at least 32
+characters and set `NEXT_PUBLIC_SITE_URL` to the deployed site's HTTPS
+origin. Vercel's function filesystem is not writable at the project root,
+so the SQLite fallback uses the function's temporary directory; set
+`ADDIS_EATS_DB_PATH=/tmp/addis-eats.sqlite` to make that choice explicit.
+Temporary storage is not durable or shared between serverless instances.
+This SQLite demo therefore does not provide reliable cross-instance order
+persistence on Vercel; use a shared managed database before relying on
+production orders.
+
 `getSession()` is the server-side helper used by pages, route handlers,
 and Server Actions. Logout deletes the cookie. Sessions are not stored in
 a server-side revocation table, so signing out does not invalidate a
