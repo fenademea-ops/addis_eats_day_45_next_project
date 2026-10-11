@@ -26,6 +26,8 @@ export async function generateMetadata({
     };
   }
 
+  const ogImageUrl = new URL(`/menu/${dish.id}/opengraph-image`, siteUrl).toString();
+
   return {
     title: dish.name,
     description: `${dish.name} - ${dish.description} Price: ${dish.price} ETB.`,
@@ -34,17 +36,23 @@ export async function generateMetadata({
     },
     openGraph: {
       type: "article",
-      title: dish.name,
-      description: dish.description,
+      title: `${dish.name} · Addis Eats`,
+      description: `${dish.description} (${dish.price} ETB)`,
       url: new URL(`/menu/${dish.id}`, siteUrl),
       images: [
         {
-          url: `/menu/${dish.id}/opengraph-image`,
+          url: ogImageUrl,
           width: 1200,
           height: 630,
           alt: `${dish.name} from Addis Eats`,
         },
       ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${dish.name} · Addis Eats`,
+      description: `${dish.description} (${dish.price} ETB)`,
+      images: [ogImageUrl],
     },
   };
 }

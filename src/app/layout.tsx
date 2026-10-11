@@ -25,6 +25,12 @@ export const metadata: Metadata = {
     description: "Discover and order delicious Ethiopian food.",
     images: ["/opengraph-image"],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Addis Eats",
+    description: "Discover and order delicious Ethiopian food.",
+    images: ["/opengraph-image"],
+  },
 };
 
 export default function RootLayout({
