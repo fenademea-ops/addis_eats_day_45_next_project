@@ -1,5 +1,15 @@
 # Data fetching and freshness
 
+## Decision Two: Where data is fetched
+ 
+| Data | Where, and why |
+|---|---|
+| Menu and dishes | Server — public, indexable, cacheable |
+| Order history | Server — private, scoped to the session |
+| Order status | Server first, then polled on the client |
+| Menu search | Client — triggered by typing, debounced |
+| Cart | Client store — it never leaves the browser |
+
 ## SWR keys
 
 | Surface | SWR key | Reason |

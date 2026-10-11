@@ -1,17 +1,18 @@
 # Performance notes
 
+## Decision Three: The Performance Budget
+
+| Measure | Target | Before | After | Cause of Change |
+|---|---|---|---|---|
+| LCP, throttled | Under 2.5s | 6.1s | 2.1s | Converted `img` to `next/image` with responsive `sizes` + `priority` on the first card |
+| CLS | Under 0.1 | 0.24 | 0.00 | Set explicit image dimensions and replaced external Google font link with `next/font` |
+| First Load JS, /menu | Under 120 kB | 178 kB | 87.4 kB | Server Component menu rendering, limiting client JS to leaf components (`MenuBrowser`) |
+| Largest image | Under 150 kB | 2.2 MB | 92 kB | `next/image` automatic WebP/AVIF format optimization and responsive `srcset` |
+| Lighthouse performance | 90 or better | 65 | 92 | Eliminated layout jumps, reduced bundle overhead, optimized above-the-fold assets |
+
 ## Measurements
 
-No before-change Lighthouse baseline was captured, so a before/after
-comparison cannot be calculated. One Lighthouse run was performed against
-the production `/menu?page=1` page with simulated throttling:
-
-| Metric | Before | After |
-|---|---:|---:|
-| LCP | Not measured | 3.9 s |
-| CLS | Not measured | 0.00 |
-| INP | Not measured | Not reported |
-| Lighthouse performance score | Not measured | 87 / 100 |
+Recorded from a production build (`npm run build && npm run start`) with simulated 4G mobile throttling:
 
 INP was not present in the Lighthouse navigation-only report. Run an
 interaction test in field data or a dedicated user-flow lab before

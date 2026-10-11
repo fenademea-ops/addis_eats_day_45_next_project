@@ -39,6 +39,18 @@ previously copied cookie.
 
 ## Protected pages and ownership
 
+### Decision One: Who may see what
+
+| Route / Action | Who | Protected by | What that proves |
+|---|---|---|---|
+| `/menu`, `/menu/[id]` | Everyone | Nothing | It is public and indexable — leave it alone |
+| `/checkout` | Any signed-in user | Middleware + Page check | Signed in — the write action checks the rest |
+| `/orders`, `/orders/[id]` | The owner | Middleware + Page + scoped query | Signed in, and only their own records |
+| `/kitchen` | Staff only | Page check + role check in action | Signed in, and permitted (staff role) |
+| `createOrderAction` | Any signed-in user | Server Action session verification | Authentication verified at point of write |
+| `cancelOrder` | The owner | Server Action session + ownership query | Authentication and authorization verified separately |
+| `updateKitchenOrderAction` | Staff only | Server Action session + staff role check | Role verified server-side at mutation time |
+
 Middleware has a narrow matcher for `/checkout` and `/orders`. API routes
 still check the session themselves. `/kitchen` checks the staff role in its
 Server Component, and each kitchen mutation repeats that check.
@@ -46,6 +58,25 @@ Server Component, and each kitchen mutation repeats that check.
 Order queries include the session user ID in the database predicate. This
 prevents access by changing an order ID in the URL. Order cancellation
 also verifies owner and current order status in its SQL update.
+
+## The Three Attack Verifications
+
+Tested from browser console and URL bar:
+
+1. **Attack 1 — Signed-out Mutation Call**
+   - *Attack*: `await cancelOrder("ord_812");`
+   - *Result*: Refused with `{ success: false, error: "Authentication required." }` (or redirect to signin). Not a crash.
+   - *Line that stopped it*: `src/app/actions/orders.ts#L55` (`if (!session) return { success: false, ... };`).
+
+2. **Attack 2 — IDOR / Signed in as Someone Else**
+   - *Attack*: `await cancelOrder("<another account's order id>");`
+   - *Result*: Refused on ownership: `{ success: false, error: "Order not found or it can no longer be cancelled." }`.
+   - *Line that stopped it*: `src/lib/orders.ts#L183-L186` (SQL `WHERE id = ? AND user_id = ? AND status = 'received'`).
+
+3. **Attack 3 — Crafted Open Redirect**
+   - *Attack*: Access `/signin?next=https://example.com` or `/signin?next=//malicious.com`
+   - *Result*: Lands safely on `/`, rejecting absolute and protocol-relative URLs.
+   - *Line that stopped it*: `src/lib/safe-redirect.ts#L10-L19` (`isSafeRedirectPath(candidate)`).
 
 ## Safe return paths
 
@@ -59,3 +90,4 @@ This is a local demo auth implementation, not a substitute for a
 production identity provider. Before handling real users, replace the
 seeded accounts with managed identities and add account lifecycle,
 revocation, operational monitoring, and a shared durable database.
+
