@@ -42,33 +42,21 @@ export default function MenuBrowser({
     useState(searchParam);
   const previousSearch = useRef(search);
 
-  useEffect(() => {
-    const url = new URLSearchParams();
-    if (searchParam) {
-      url.set("search", searchParam);
-    }
-    url.set("page", String(page));
-    const expectedSearch = url.toString();
-
-    if (searchParams.toString() !== expectedSearch) {
-      router.replace(`/menu?${expectedSearch}`, {
-        scroll: false,
-      });
-    }
-  }, [page, router, searchParam, searchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search.trim());
+      const trimmed = search.trim();
+      setDebouncedSearch(trimmed);
 
-      if (search !== previousSearch.current) {
-        previousSearch.current = search;
+      if (trimmed !== previousSearch.current) {
+        previousSearch.current = trimmed;
         const params = new URLSearchParams();
-        if (search.trim()) {
-          params.set("search", search.trim());
+        if (trimmed) {
+          params.set("search", trimmed);
         }
         params.set("page", "1");
-        router.replace(`/menu?${params.toString()}`, {
+        const queryStr = params.toString();
+        router.replace(queryStr ? `/menu?${queryStr}` : "/menu", {
           scroll: false,
         });
       }
@@ -152,7 +140,7 @@ export default function MenuBrowser({
                   height={400}
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                   priority={index === 0}
-                  loading={index < 2 ? "eager" : "lazy"}
+                  loading={index === 0 ? undefined : "lazy"}
                   className="h-full w-full object-cover"
                 />
               </div>
