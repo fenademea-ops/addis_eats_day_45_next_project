@@ -5,7 +5,7 @@
     "category": "Traditional",
     "price": 450,
     "description": "Minced beef seasoned with Ethiopian spices and clarified butter.",
-    "image": "/images/kitfo.jpg"
+    "image": "/images/kitfo.png"
   },
   {
     "id": "doro-wot",
@@ -13,7 +13,7 @@
     "category": "Traditional",
     "price": 500,
     "description": "Spicy Ethiopian chicken stew served with injera.",
-    "image": "/images/doro_wat.jpg"
+    "image": "/images/doro-wot.png"
   },
   {
     "id": "beef-tibs",

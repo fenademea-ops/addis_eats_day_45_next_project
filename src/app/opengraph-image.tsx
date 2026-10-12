@@ -13,7 +13,9 @@ export default function OpenGraphImage() {
     const imagePath = path.join(process.cwd(), "public", "images", "doro_wat.jpg");
     if (fs.existsSync(imagePath)) {
       const buffer = fs.readFileSync(imagePath);
-      imageBase64 = `data:image/jpeg;base64,${buffer.toString("base64")}`;
+      const isPng = buffer[0] === 0x89 && buffer[1] === 0x50;
+      const mime = isPng ? "image/png" : "image/jpeg";
+      imageBase64 = `data:${mime};base64,${buffer.toString("base64")}`;
     }
   } catch (error) {
     console.error("Failed to load OG preview image:", error);

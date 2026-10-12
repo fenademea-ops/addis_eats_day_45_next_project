@@ -36,15 +36,6 @@ export default async function DishOpenGraphImage({
         imageBase64 = `data:image/jpeg;base64,${buffer.toString("base64")}`;
       }
     }
-
-    // Fallback to doro_wat.jpg if dish image is WebP or missing
-    if (!imageBase64) {
-      const fallbackPath = path.join(process.cwd(), "public", "images", "doro_wat.jpg");
-      if (fs.existsSync(fallbackPath)) {
-        const fallbackBuffer = fs.readFileSync(fallbackPath);
-        imageBase64 = `data:image/jpeg;base64,${fallbackBuffer.toString("base64")}`;
-      }
-    }
   } catch (error) {
     console.error("Failed to load dish OG image:", error);
   }
