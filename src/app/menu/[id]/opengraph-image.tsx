@@ -23,8 +23,8 @@ export default async function DishOpenGraphImage({
   let imageBase64 = "";
   try {
     const relPath = dish.image.startsWith("/") ? dish.image.slice(1) : dish.image;
-    let imagePath = path.join(process.cwd(), "public", relPath);
-    let buffer = fs.existsSync(imagePath) ? fs.readFileSync(imagePath) : null;
+    const imagePath = path.join(process.cwd(), "public", relPath);
+    const buffer = fs.existsSync(imagePath) ? fs.readFileSync(imagePath) : null;
 
     // Satori / ImageResponse only decodes PNG or standard JPEG
     if (buffer && buffer.length >= 4) {
@@ -56,99 +56,37 @@ export default async function DishOpenGraphImage({
           display: "flex",
           width: "100%",
           height: "100%",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "60px 70px",
-          background: "linear-gradient(135deg, #431407 0%, #1c1917 100%)",
-          color: "#fff",
-          fontFamily: "sans-serif",
+          position: "relative",
+          backgroundColor: "#f8f4ec",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            maxWidth: "600px",
-          }}
-        >
-          <div
+        {imageBase64 ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageBase64}
+            alt={dish.name}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "6px 14px",
-              background: "rgba(234, 88, 12, 0.2)",
-              border: "1px solid rgba(234, 88, 12, 0.5)",
-              borderRadius: "9999px",
-              color: "#fb923c",
-              fontSize: 20,
-              fontWeight: 600,
-              alignSelf: "flex-start",
-              marginBottom: "20px",
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
             }}
-          >
-            ADDIS EATS · {dish.category.toUpperCase()}
-          </div>
+          />
+        ) : (
           <div
             style={{
               display: "flex",
+              flexDirection: "column",
+              width: "100%",
+              height: "100%",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#7a263a",
+              color: "#ffffff",
               fontSize: 64,
               fontWeight: 800,
-              color: "#fff",
-              lineHeight: 1.1,
-              marginBottom: "18px",
             }}
           >
             {dish.name}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              fontSize: 26,
-              color: "#fed7aa",
-              lineHeight: 1.4,
-              marginBottom: "28px",
-            }}
-          >
-            {dish.description}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              fontSize: 38,
-              fontWeight: 700,
-              color: "#f97316",
-            }}
-          >
-            {dish.price} ETB
-          </div>
-        </div>
-
-        {imageBase64 && (
-          <div
-            style={{
-              display: "flex",
-              width: "420px",
-              height: "420px",
-              borderRadius: "32px",
-              overflow: "hidden",
-              border: "4px solid rgba(251, 146, 60, 0.4)",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageBase64}
-              alt={dish.name}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
           </div>
         )}
       </div>

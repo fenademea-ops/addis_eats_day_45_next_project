@@ -26,33 +26,31 @@ export async function generateMetadata({
     };
   }
 
-  const ogImageUrl = new URL(`/menu/${dish.id}/opengraph-image`, siteUrl).toString();
+  const dishImageUrl = new URL(dish.image, siteUrl).toString();
 
   return {
-    title: dish.name,
-    description: `${dish.name} - ${dish.description} Price: ${dish.price} ETB.`,
+    title: `${dish.name} | Addis Eats`,
+    description: `${dish.name} - ${dish.price} ETB. ${dish.description}`,
     alternates: {
       canonical: new URL(`/menu/${dish.id}`, siteUrl),
     },
     openGraph: {
-      type: "article",
-      title: `${dish.name} · Addis Eats`,
-      description: `${dish.description} (${dish.price} ETB)`,
+      type: "website",
+      title: `${dish.name} | Addis Eats`,
+      description: `${dish.name} - ${dish.price} ETB. ${dish.description}`,
       url: new URL(`/menu/${dish.id}`, siteUrl),
       images: [
         {
-          url: ogImageUrl,
-          width: 1200,
-          height: 630,
+          url: dishImageUrl,
           alt: `${dish.name} from Addis Eats`,
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${dish.name} · Addis Eats`,
-      description: `${dish.description} (${dish.price} ETB)`,
-      images: [ogImageUrl],
+      title: `${dish.name} | Addis Eats`,
+      description: `${dish.name} - ${dish.price} ETB. ${dish.description}`,
+      images: [dishImageUrl],
     },
   };
 }
