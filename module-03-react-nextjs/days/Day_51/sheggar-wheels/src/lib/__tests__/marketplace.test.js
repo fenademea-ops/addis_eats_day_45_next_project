@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { safeReturnPath } from '../auth';
+import { safeReturnPath, registerUser } from '../auth';
 import { canTransition, BOOKING_STATES } from '../bookingMachine';
 import { checkDateOverlap, isCarAvailableForDates } from '../validation';
 import { escapeCsvCell, generateCsv } from '../csv';
@@ -7,11 +7,18 @@ import {
   createBooking,
   transitionBookingStatus,
   updateCarListing,
+  canUserAccessBooking,
   getUsers,
   getCars,
   getBookings,
 } from '../data';
-import { initializeDemoData, resetDemoData, writeStorage, STORAGE_KEYS } from '../storage';
+import {
+  initializeDemoData,
+  resetDemoData,
+  readStorage,
+  writeStorage,
+  STORAGE_KEYS,
+} from '../storage';
 
 // In-memory mock for localStorage & sessionStorage in Node environment
 const mockStorage = {};
@@ -223,5 +230,118 @@ describe('5. Required Negative Tests (Strict security and ownership)', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('Your account is suspended');
+  });
+
+  it("Test 5: Renter B attempting to view Renter A's private booking is refused", () => {
+    const bookings = getBookings();
+    const renterABooking = bookings.find((b) => b.renterId === 'user-renter-1');
+    expect(renterABooking).toBeDefined();
+
+    // Renter B (user-dual-1) attempts to access
+    const checkOther = canUserAccessBooking('user-dual-1', renterABooking.id);
+    expect(checkOther.allowed).toBe(false);
+    expect(checkOther.error).toBe('Not yours');
+
+    // Unauthenticated visitor
+    const checkAnon = canUserAccessBooking(null, renterABooking.id);
+    expect(checkAnon.allowed).toBe(false);
+    expect(checkAnon.error).toBe('Not signed in');
+
+    // Legitimate renter A access
+    const checkOwner = canUserAccessBooking('user-renter-1', renterABooking.id);
+    expect(checkOwner.allowed).toBe(true);
+
+    // Platform admin access
+    const checkAdmin = canUserAccessBooking('user-admin-1', renterABooking.id);
+    expect(checkAdmin.allowed).toBe(true);
+  });
+
+  it('Test 6: Invalid booking dates are rejected with validation error', () => {
+    // End date before start date
+    const resInverted = createBooking('user-renter-1', {
+      carId: 'car-1',
+      startDate: '2026-12-10',
+      endDate: '2026-12-05',
+    });
+    expect(resInverted.success).toBe(false);
+    expect(resInverted.error).toContain('cannot be earlier than start date');
+
+    // Malformed date strings
+    const resMalformed = createBooking('user-renter-1', {
+      carId: 'car-1',
+      startDate: 'invalid-date',
+      endDate: '2026-12-10',
+    });
+    expect(resMalformed.success).toBe(false);
+    expect(resMalformed.error).toContain('YYYY-MM-DD');
+
+    // Missing dates
+    const resMissing = createBooking('user-renter-1', {
+      carId: 'car-1',
+      startDate: '',
+      endDate: '',
+    });
+    expect(resMissing.success).toBe(false);
+  });
+
+  it('Test 7: Invalid lifecycle transitions are rejected by data layer', () => {
+    const bookings = getBookings();
+    const reqBooking = bookings.find((b) => b.status === BOOKING_STATES.REQUESTED);
+    expect(reqBooking).toBeDefined();
+
+    // Cannot jump straight from requested to completed
+    const illegalJump = transitionBookingStatus(
+      reqBooking.ownerId,
+      reqBooking.id,
+      BOOKING_STATES.COMPLETED
+    );
+    expect(illegalJump.success).toBe(false);
+    expect(illegalJump.error).toContain('Invalid transition');
+
+    // Terminal state cannot be transitioned
+    const cancelledBooking = bookings.find((b) => b.status === BOOKING_STATES.CANCELLED);
+    expect(cancelledBooking).toBeDefined();
+    const terminalMutate = transitionBookingStatus(
+      'user-admin-1',
+      cancelledBooking.id,
+      BOOKING_STATES.CONFIRMED
+    );
+    expect(terminalMutate.success).toBe(false);
+  });
+
+  it('Test 8: Duplicate email registration is refused without altering user store', () => {
+    const initialUsersCount = getUsers().length;
+
+    // Existing seed user email
+    const duplicateRes = registerUser({
+      name: 'Imposter User',
+      email: 'abebe@example.com', // already belongs to user-renter-1
+      phone: '0911000999',
+    });
+
+    expect(duplicateRes.success).toBe(false);
+    expect(duplicateRes.error).toBe('An account with this email already exists');
+    expect(getUsers().length).toBe(initialUsersCount);
+  });
+
+  it('Test 9: Public registration cannot grant admin role', () => {
+    const regRes = registerUser({
+      name: 'Privilege Escalation Tester',
+      email: 'escalate@test.et',
+      phone: '0911555666',
+      roles: ['admin', 'owner'], // Attacker payload injecting admin
+    });
+
+    expect(regRes.success).toBe(true);
+    expect(regRes.user.roles).not.toContain('admin');
+    expect(regRes.user.roles).toContain('renter');
+  });
+
+  it('Test 10: Corrupted or malformed browser storage JSON recovers with fallback', () => {
+    // Inject corrupt JSON into storage
+    mockStorage['sw_corrupt_test'] = '{broken: json, unquoted}';
+
+    const result = readStorage('sw_corrupt_test', { fallback: true });
+    expect(result).toEqual({ fallback: true });
   });
 });

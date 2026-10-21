@@ -15,7 +15,7 @@ export default function BookingReviewPage({ params }) {
   const bookingId = unwrappedParams.id;
   const router = useRouter();
 
-  const { bookings, cars, users, reviews, submitReview, showToast } = useStore();
+  const { bookings, cars, users, reviews, currentUser, submitReview, showToast } = useStore();
 
   const [rating, setRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
@@ -26,6 +26,19 @@ export default function BookingReviewPage({ params }) {
   const car = booking ? cars.find((c) => c.id === booking.carId) : null;
   const host = booking ? users.find((u) => u.id === booking.ownerId) : null;
   const existingReview = reviews.find((r) => r.bookingId === bookingId);
+
+  // Negative test rule: only the booking renter can submit a review
+  if (booking && currentUser && booking.renterId !== currentUser.id && !currentUser.roles.includes('admin')) {
+    return (
+      <div className="max-w-md mx-auto py-16 text-center space-y-4">
+        <h1 className="text-xl font-bold text-slate-900">Access Restricted</h1>
+        <p className="text-sm text-slate-600">Only the renter of this completed trip can submit a review.</p>
+        <Link href="/bookings">
+          <Button variant="primary" size="sm">Back to My Bookings</Button>
+        </Link>
+      </div>
+    );
+  }
 
   if (!booking || !car) {
     return (

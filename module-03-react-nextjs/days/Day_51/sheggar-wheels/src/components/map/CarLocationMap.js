@@ -13,12 +13,13 @@ export default function CarLocationMap({
 }) {
   const [isClient, setIsClient] = useState(false);
   const [MapComponents, setMapComponents] = useState(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
     // Dynamically load react-leaflet on client
-    Promise.all([import('react-leaflet'), import('leaflet')]).then(
-      ([reactLeaflet, L]) => {
+    Promise.all([import('react-leaflet'), import('leaflet')])
+      .then(([reactLeaflet, L]) => {
         // Fix Leaflet default icon paths in Next.js bundle
         delete L.Icon.Default.prototype._getIconUrl;
         L.Icon.Default.mergeOptions({
@@ -34,9 +35,32 @@ export default function CarLocationMap({
           Popup: reactLeaflet.Popup,
           Circle: reactLeaflet.Circle,
         });
-      }
-    );
+      })
+      .catch((err) => {
+        console.warn('Leaflet map load failed, using neighbourhood address fallback:', err);
+        setLoadError(true);
+      });
   }, []);
+
+  if (loadError) {
+    return (
+      <div
+        className="w-full bg-slate-50 rounded-xl p-6 flex flex-col justify-center border border-slate-200 space-y-3"
+        style={{ height }}
+      >
+        <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
+          <MapPin className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>Handover Pickup Zone: {neighbourhood}, Addis Ababa</span>
+        </div>
+        <p className="text-xs text-slate-600">
+          Interactive map preview unavailable. Approximate GPS coordinates: {Number(latitude).toFixed(4)}° N, {Number(longitude).toFixed(4)}° E.
+        </p>
+        <div className="text-[11px] text-slate-500 bg-white p-3 rounded-lg border border-slate-200">
+          The host will coordinate exact street handover in {neighbourhood} upon booking confirmation.
+        </div>
+      </div>
+    );
+  }
 
   if (!isClient || !MapComponents) {
     return (

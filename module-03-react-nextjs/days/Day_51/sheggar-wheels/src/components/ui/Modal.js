@@ -5,23 +5,60 @@ import { X } from 'lucide-react';
 
 export default function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }) {
   const modalRef = useRef(null);
+  const previouslyFocusedElement = useRef(null);
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-
     if (isOpen) {
+      previouslyFocusedElement.current = document.activeElement;
       document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleKeyDown);
-    }
 
-    return () => {
-      document.body.style.overflow = 'unset';
-      window.removeEventListener('keydown', handleKeyDown);
-    };
+      // Focus modal or first focusable element after render
+      const focusTimer = setTimeout(() => {
+        if (modalRef.current) {
+          const focusables = modalRef.current.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          if (focusables.length > 0) {
+            focusables[0].focus();
+          } else {
+            modalRef.current.focus();
+          }
+        }
+      }, 50);
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onClose();
+        } else if (e.key === 'Tab' && modalRef.current) {
+          const focusables = modalRef.current.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          if (focusables.length === 0) return;
+          const first = focusables[0];
+          const last = focusables[focusables.length - 1];
+
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        clearTimeout(focusTimer);
+        document.body.style.overflow = 'unset';
+        window.removeEventListener('keydown', handleKeyDown);
+        if (previouslyFocusedElement.current && typeof previouslyFocusedElement.current.focus === 'function') {
+          previouslyFocusedElement.current.focus();
+        }
+      };
+    }
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;

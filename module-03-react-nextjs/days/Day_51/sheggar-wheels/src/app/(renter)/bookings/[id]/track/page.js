@@ -14,11 +14,24 @@ export default function BookingTrackPage({ params }) {
   const unwrappedParams = use(params);
   const bookingId = unwrappedParams.id;
 
-  const { bookings, cars, users } = useStore();
+  const { bookings, cars, users, currentUser } = useStore();
 
   const booking = bookings.find((b) => b.id === bookingId);
   const car = booking ? cars.find((c) => c.id === booking.carId) : null;
   const host = booking ? users.find((u) => u.id === booking.ownerId) : null;
+
+  // Negative test rule: unauthorized user cannot view private tracking
+  if (booking && currentUser && booking.renterId !== currentUser.id && !currentUser.roles.includes('admin') && booking.ownerId !== currentUser.id) {
+    return (
+      <div className="max-w-md mx-auto py-16 text-center space-y-4">
+        <h1 className="text-xl font-bold text-slate-900">Access Restricted</h1>
+        <p className="text-sm text-slate-600">You do not have permission to view live telemetry for this reservation.</p>
+        <Link href="/bookings">
+          <Button variant="primary" size="sm">Back to My Bookings</Button>
+        </Link>
+      </div>
+    );
+  }
 
   if (!booking || !car) {
     return (

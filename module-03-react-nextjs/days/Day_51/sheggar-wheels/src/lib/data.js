@@ -240,6 +240,30 @@ export function getBookingById(id) {
 }
 
 /**
+ * Check if an actor is authorized to view a private booking record.
+ * Allowed: The booking's renter, the booking's car host, or an admin.
+ * Denied: Any other user or unauthenticated visitor.
+ * @param {string|null} userId
+ * @param {string} bookingId
+ * @returns {{ allowed: boolean, booking?: Object, error?: string }}
+ */
+export function canUserAccessBooking(userId, bookingId) {
+  if (!userId) return { allowed: false, error: 'Not signed in' };
+  const user = getUserById(userId);
+  if (!user) return { allowed: false, error: 'User not found' };
+  const booking = getBookingById(bookingId);
+  if (!booking) return { allowed: false, error: 'Booking not found' };
+
+  if (hasRole(user, 'admin')) {
+    return { allowed: true, booking };
+  }
+  if (booking.renterId === userId || booking.ownerId === userId) {
+    return { allowed: true, booking };
+  }
+  return { allowed: false, error: 'Not yours' };
+}
+
+/**
  * Create a new booking request (Renter only)
  * Negative test rule: Call booking function without session → "Not signed in", no booking created.
  */

@@ -113,7 +113,7 @@ export default function PublicLayout({ children }) {
           </div>
 
           <div className="pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-            <div>© {new Date().getFullYear()} Sheggar Wheels Addis Ababa. All rights reserved.</div>
+            <div>© 2026 Sheggar Wheels Addis Ababa. All rights reserved.</div>
             <div className="flex gap-4">
               <span>Demo Build v1.0.0</span>
               <span>•</span>
