@@ -1,0 +1,13 @@
+{
+  "name": "day-51-sheggar-wheels-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Proxy package scripts for Day_51 Sheggar Wheels project",
+  "scripts": {
+    "test": "npm --prefix sheggar-wheels run test",
+    "dev": "npm --prefix sheggar-wheels run dev",
+    "build": "npm --prefix sheggar-wheels run build",
+    "start": "npm --prefix sheggar-wheels run start",
+    "lint": "npm --prefix sheggar-wheels run lint"
+  }
+}
