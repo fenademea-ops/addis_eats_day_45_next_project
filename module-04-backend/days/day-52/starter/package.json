@@ -1,0 +1,20 @@
+{
+  "name": "day-52-addis-eats-typescript",
+  "version": "1.0.0",
+  "description": "Day 52 – Typing the Addis Eats Order (Module 4: Node.js + NestJS)",
+  "main": "dist/order.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "ts-node order.test.ts",
+    "start": "ts-node order.ts"
+  },
+  "keywords": ["typescript", "nodejs", "nestjs", "addis-eats"],
+  "author": "Feneti Demissie",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^22.10.1"
+  }
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "id": "ORD-001",
+    "customerName": "Abebe Girma",
+    "area": "Bole",
+    "status": "delivered",
+    "dishes": [
+      { "name": "Tibs", "price": 28000 },
+      { "name": "Injera Firfir", "price": 15000 },
+      { "name": "Tej (honey wine)", "price": 12000 }
+    ],
+    "telebirrPhone": "+251911234567"
+  },
+  {
+    "id": "ORD-002",
+    "customerName": "Tigist Alemu",
+    "area": "Kazanchis",
+    "status": "preparing",
+    "dishes": [
+      { "name": "Doro Wat", "price": 35000 },
+      { "name": "Kategna", "price": 8000 }
+    ]
+  },
+  {
+    "id": "ORD-003",
+    "customerName": "Yonas Bekele",
+    "area": "Piassa",
+    "status": "out-for-delivery",
+    "dishes": [
+      { "name": "Shiro Wet", "price": 18000 },
+      { "name": "Ayib", "price": 9000 },
+      { "name": "Soft Drink", "price": 6000 }
+    ]
+  },
+  {
+    "id": "ORD-004",
+    "customerName": "Meron Haile",
+    "area": "Merkato",
+    "status": "pending",
+    "dishes": [
+      { "name": "Kitfo", "price": 42000 },
+      { "name": "Gored Gored", "price": 38000 },
+      { "name": "Tej (honey wine)", "price": 12000 },
+      { "name": "Coffee Ceremony", "price": 15000 }
+    ],
+    "telebirrPhone": "+251922345678"
+  },
+  {
+    "id": "ORD-005",
+    "customerName": "Dawit Tadesse",
+    "area": "Bole",
+    "status": "confirmed",
+    "dishes": [
+      { "name": "Fasting Combo", "price": 22000 }
+    ]
+  }
+]
