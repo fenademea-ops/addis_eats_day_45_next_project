@@ -36,13 +36,34 @@ import {
   updateCarListing,
   toggleCarActiveStatus,
   adminModerateCar,
+  adminEditCar,
+  adminUpdateCarRentOutStatus,
+  adminBlockCarDates,
+  adminUnblockCarDates,
+  getCarRentalAvailability,
+  adminCancelBooking,
+  adminCreateBooking,
+  adminConfirmBooking,
+  adminDeclineBooking,
+  adminAddBookingNote,
+  adminStartBooking,
+  adminCompleteBooking,
+  adminProcessPayout,
+  adminProcessRefund,
   createReview,
   replyToReview,
+  adminModerateReview,
   createDispute,
   resolveDispute,
   createAnnouncement,
+  editAnnouncement,
   toggleAnnouncement,
+  deleteAnnouncement,
   updateUserStatus,
+  getActivityLog,
+  getSettings,
+  updateSettings,
+  resetSettings,
 } from './data';
 import { BOOKING_STATES } from './bookingMachine';
 
@@ -58,6 +79,8 @@ export function StoreProvider({ children }) {
   const [reviews, setReviews] = useState([]);
   const [disputes, setDisputes] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [activityLog, setActivityLog] = useState([]);
+  const [settings, setSettings] = useState(null);
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
 
   const showToast = useCallback((message, type = 'info') => {
@@ -80,6 +103,8 @@ export function StoreProvider({ children }) {
     setReviews(getReviews());
     setDisputes(getDisputes());
     setAnnouncements(getAnnouncements());
+    setActivityLog(getActivityLog());
+    setSettings(getSettings());
   }, []);
 
   useEffect(() => {
@@ -93,8 +118,17 @@ export function StoreProvider({ children }) {
       refreshState();
     });
 
+    // 3. Listen for sign-out event — clear state then hard-redirect to home
+    const handleSignOut = () => {
+      refreshState();
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = '/';
+    };
+    window.addEventListener('sheggar_signout', handleSignOut);
+
     return () => {
       unsubscribe();
+      window.removeEventListener('sheggar_signout', handleSignOut);
     };
   }, [refreshState]);
 
@@ -154,6 +188,9 @@ export function StoreProvider({ children }) {
     disputes,
     announcements,
     activeAnnouncements: announcements.filter((a) => a.active),
+    activityLog,
+    settings,
+    getCarAvailability: (carId, date) => getCarRentalAvailability(carId, date),
     toast,
     showToast,
     refreshState,
@@ -298,6 +335,186 @@ export function StoreProvider({ children }) {
       const res = toggleAnnouncement(currentUser?.id, annId);
       if (res.success) {
         refreshState();
+      }
+      return res;
+    },
+    editAnnouncementAction: (annId, updates) => {
+      const res = editAnnouncement(currentUser?.id, annId, updates);
+      if (res.success) {
+        refreshState();
+        showToast('Announcement updated', 'success');
+      } else {
+        showToast(res.error || 'Failed to update announcement', 'error');
+      }
+      return res;
+    },
+    deleteAnnouncementAction: (annId) => {
+      const res = deleteAnnouncement(currentUser?.id, annId);
+      if (res.success) {
+        refreshState();
+        showToast('Announcement deleted', 'info');
+      } else {
+        showToast(res.error || 'Failed to delete announcement', 'error');
+      }
+      return res;
+    },
+    adminEditCarAction: (carId, updates) => {
+      const res = adminEditCar(currentUser?.id, carId, updates);
+      if (res.success) {
+        refreshState();
+        showToast('Car listing details updated', 'success');
+      } else {
+        showToast(res.error || 'Failed to edit car', 'error');
+      }
+      return res;
+    },
+    adminUpdateCarRentOutStatusAction: (carId, payload) => {
+      const res = adminUpdateCarRentOutStatus(currentUser?.id, carId, payload);
+      if (res.success) {
+        refreshState();
+        showToast('Vehicle rent-out and availability controls updated successfully', 'success');
+      } else {
+        showToast(res.error || 'Failed to update rent-out status', 'error');
+      }
+      return res;
+    },
+    adminBlockCarDatesAction: (carId, payload) => {
+      const res = adminBlockCarDates(currentUser?.id, carId, payload);
+      if (res.success) {
+        refreshState();
+        showToast('Dates blocked on vehicle calendar successfully', 'success');
+      } else {
+        showToast(res.error || 'Failed to block dates', 'error');
+      }
+      return res;
+    },
+    adminUnblockCarDatesAction: (carId, blockIdOrDate) => {
+      const res = adminUnblockCarDates(currentUser?.id, carId, blockIdOrDate);
+      if (res.success) {
+        refreshState();
+        showToast('Blocked dates removed. Vehicle calendar updated', 'info');
+      } else {
+        showToast(res.error || 'Failed to unblock dates', 'error');
+      }
+      return res;
+    },
+    adminCreateBookingAction: (payload) => {
+      const res = adminCreateBooking(currentUser?.id, payload);
+      if (res.success) {
+        refreshState();
+        showToast(`Created rent-out agreement #${res.booking.id}`, 'success');
+      } else {
+        showToast(res.error || 'Failed to create rent-out agreement', 'error');
+      }
+      return res;
+    },
+    adminCancelBookingAction: (bookingId, reason) => {
+      const res = adminCancelBooking(currentUser?.id, bookingId, reason);
+      if (res.success) {
+        refreshState();
+        showToast('Booking cancelled by administrator', 'info');
+      } else {
+        showToast(res.error || 'Failed to cancel booking', 'error');
+      }
+      return res;
+    },
+    adminConfirmBookingAction: (bookingId, adminNotes) => {
+      const res = adminConfirmBooking(currentUser?.id, bookingId, adminNotes);
+      if (res.success) {
+        refreshState();
+        showToast('Booking request approved and confirmed', 'success');
+      } else {
+        showToast(res.error || 'Failed to approve booking', 'error');
+      }
+      return res;
+    },
+    adminDeclineBookingAction: (bookingId, declineReason) => {
+      const res = adminDeclineBooking(currentUser?.id, bookingId, declineReason);
+      if (res.success) {
+        refreshState();
+        showToast('Booking request declined', 'info');
+      } else {
+        showToast(res.error || 'Failed to decline booking', 'error');
+      }
+      return res;
+    },
+    adminAddBookingNoteAction: (bookingId, noteText) => {
+      const res = adminAddBookingNote(currentUser?.id, bookingId, noteText);
+      if (res.success) {
+        refreshState();
+        showToast('Internal note saved', 'success');
+      } else {
+        showToast(res.error || 'Failed to add note', 'error');
+      }
+      return res;
+    },
+    adminStartBookingAction: (bookingId) => {
+      const res = adminStartBooking(currentUser?.id, bookingId);
+      if (res.success) {
+        refreshState();
+        showToast('Rental marked as started / in progress', 'success');
+      } else {
+        showToast(res.error || 'Action failed', 'error');
+      }
+      return res;
+    },
+    adminCompleteBookingAction: (bookingId) => {
+      const res = adminCompleteBooking(currentUser?.id, bookingId);
+      if (res.success) {
+        refreshState();
+        showToast('Rental marked as completed', 'success');
+      } else {
+        showToast(res.error || 'Action failed', 'error');
+      }
+      return res;
+    },
+    adminProcessPayoutAction: (bookingId) => {
+      const res = adminProcessPayout(currentUser?.id, bookingId);
+      if (res.success) {
+        refreshState();
+        showToast(`Simulated payout processed (Ref: ${res.booking.payoutRef})`, 'success');
+      } else {
+        showToast(res.error || 'Payout failed', 'error');
+      }
+      return res;
+    },
+    adminProcessRefundAction: (bookingId, reason) => {
+      const res = adminProcessRefund(currentUser?.id, bookingId, reason);
+      if (res.success) {
+        refreshState();
+        showToast(`Simulated refund processed (Ref: ${res.booking.refundRef})`, 'success');
+      } else {
+        showToast(res.error || 'Refund failed', 'error');
+      }
+      return res;
+    },
+    adminModerateReviewAction: (reviewId, status, reason) => {
+      const res = adminModerateReview(currentUser?.id, reviewId, status, reason);
+      if (res.success) {
+        refreshState();
+        showToast(`Review marked as ${status}`, 'info');
+      } else {
+        showToast(res.error || 'Moderation failed', 'error');
+      }
+      return res;
+    },
+    updateSettingsAction: (newSettings) => {
+      const res = updateSettings(currentUser?.id, newSettings);
+      if (res.success) {
+        refreshState();
+        showToast('Platform settings saved successfully', 'success');
+      } else {
+        showToast(res.error || 'Failed to save settings', 'error');
+      }
+      return res;
+    },
+    resetSettingsAction: () => {
+      const res = resetSettings(currentUser?.id);
+      if (res.success) {
+        refreshState();
+        showToast('Settings reset to default configuration', 'info');
+      } else {
+        showToast(res.error || 'Failed to reset settings', 'error');
       }
       return res;
     },

@@ -118,3 +118,43 @@ These tests are codified in `src/lib/__tests__/marketplace.test.js` and run via 
 - **Scenario**: A user marked with `status: "suspended"` (`user-suspended-1`) attempts to book a vehicle or sign in.
 - **Enforcement**: Both `signInAsDemo` and `createBooking` evaluate `isUserSuspended(user)`.
 - **Result**: Returns `{ success: false, error: 'Your account is suspended' }`. The UI renders the **Access Blocked** account restriction screen.
+
+### Test 6: A signed-out visitor cannot perform an admin action
+- **Scenario**: Anonymous visitor invokes `adminModerateCar(null, ...)`.
+- **Enforcement**: Requires active admin session. Returns `{ success: false, error: 'Not signed in' }`.
+
+### Test 7: A regular renter cannot approve a car listing
+- **Scenario**: `user-renter-1` invokes `adminModerateCar`.
+- **Enforcement**: Role check ensures `hasRole(user, 'admin')`. Returns `{ success: false, error: 'Unauthorized: Admin role required' }`.
+
+### Test 8: An admin can approve a pending listing
+- **Scenario**: `user-admin-1` approves `car-9-pending`.
+- **Enforcement**: Validates admin role, writes `status: 'approved'` to `sw_cars_v1`, records action in `sw_activity_v1`.
+
+### Test 9: A rejected or inactive car cannot receive a new booking
+- **Scenario**: Booking requested for `car-9-pending` (after rejection) or `car-10-inactive`.
+- **Enforcement**: `createBooking` checks vehicle approval status. Returns `{ success: false, error: 'This car is not currently available for booking' }`.
+
+### Test 10: Two overlapping bookings cannot both become confirmed
+- **Scenario**: Two bookings for `car-1` with overlapping dates attempt confirmation.
+- **Enforcement**: `transitionBookingStatus` checks existing confirmed/in-progress reservations. Second confirmation is rejected with `"Cannot approve: Car is already booked"`.
+
+### Test 11: Invalid lifecycle transitions are rejected
+- **Scenario**: Attempting to transition from `requested` directly to `in_progress` or `completed`.
+- **Enforcement**: State machine rejects illegal transitions. Record remains in original state.
+
+### Test 12: An eligible mock refund updates the correct payment record
+- **Scenario**: Admin processes simulated refund on a paid booking.
+- **Enforcement**: Generates `refundRef: "RF-DEMO-XXXXX"`, sets `paymentStatus: 'refunded_mock'`, and logs audit entry.
+
+### Test 13: Resolving a dispute requires a resolution note
+- **Scenario**: Admin attempts to resolve dispute with empty string.
+- **Enforcement**: Validates required explanation. Returns error if note is missing.
+
+### Test 14: CSV export correctly escapes special characters
+- **Scenario**: Car model or description contains commas, double quotes, or newlines.
+- **Enforcement**: RFC 4180 cell serializer wraps field in double quotes and escapes internal quotes.
+
+### Test 15: Last usable admin cannot be suspended
+- **Scenario**: Admin attempts to suspend their own account or the sole remaining admin.
+- **Enforcement**: `updateUserStatus` rejects with `"You cannot suspend your own admin account"`.

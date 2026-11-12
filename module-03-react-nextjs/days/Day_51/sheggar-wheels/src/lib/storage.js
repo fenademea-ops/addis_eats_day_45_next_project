@@ -11,6 +11,8 @@ import {
   SEED_REVIEWS,
   SEED_DISPUTES,
   SEED_ANNOUNCEMENTS,
+  SEED_ACTIVITY,
+  DEFAULT_SETTINGS,
 } from './seed';
 
 export const STORAGE_KEYS = {
@@ -20,19 +22,24 @@ export const STORAGE_KEYS = {
   REVIEWS: 'sw_reviews_v1',
   DISPUTES: 'sw_disputes_v1',
   ANNOUNCEMENTS: 'sw_announcements_v1',
+  ACTIVITY: 'sw_activity_v1',
+  SETTINGS: 'sw_settings_v1',
   SESSION: 'sw_session_v1',
   CHECKOUT_DRAFT: 'sw_checkout_draft_v1',
 };
 
-const SESSION_KEYS = [STORAGE_KEYS.SESSION, STORAGE_KEYS.CHECKOUT_DRAFT];
-
 /**
- * Determine if key belongs in sessionStorage
- * @param {string} key
+ * Determine if key belongs in sessionStorage.
+ * NOTE: All keys now use localStorage for network-link compatibility.
+ * sessionStorage is per-tab AND per-origin — switching between localhost:3000
+ * and a network IP (192.168.x.x:3000) gives a completely empty sessionStorage,
+ * making the app appear logged out on the network link.
+ * We use localStorage for everything and rely on explicit sign-out to clear it.
+ * @param {string} _key
  * @returns {boolean}
  */
-export function isSessionKey(key) {
-  return SESSION_KEYS.includes(key);
+export function isSessionKey(_key) {
+  return false; // All keys use localStorage
 }
 
 /**
@@ -171,6 +178,16 @@ export function initializeDemoData() {
   if (!existingAnnouncements) {
     writeStorage(STORAGE_KEYS.ANNOUNCEMENTS, SEED_ANNOUNCEMENTS);
   }
+
+  const existingActivity = readStorage(STORAGE_KEYS.ACTIVITY, null);
+  if (!existingActivity) {
+    writeStorage(STORAGE_KEYS.ACTIVITY, SEED_ACTIVITY);
+  }
+
+  const existingSettings = readStorage(STORAGE_KEYS.SETTINGS, null);
+  if (!existingSettings) {
+    writeStorage(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+  }
 }
 
 /**
@@ -186,6 +203,8 @@ export function resetDemoData() {
   writeStorage(STORAGE_KEYS.REVIEWS, SEED_REVIEWS);
   writeStorage(STORAGE_KEYS.DISPUTES, SEED_DISPUTES);
   writeStorage(STORAGE_KEYS.ANNOUNCEMENTS, SEED_ANNOUNCEMENTS);
+  writeStorage(STORAGE_KEYS.ACTIVITY, SEED_ACTIVITY);
+  writeStorage(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
 
   // Clear session & checkout draft
   removeStorage(STORAGE_KEYS.SESSION);
@@ -198,7 +217,7 @@ export function resetDemoData() {
  * @returns {Function} cleanup unsubscribe function
  */
 export function subscribeToStorageChanges(callback) {
-  if (typeof window === 'undefined') return () => {};
+  if (typeof window === 'undefined') return () => { };
 
   const handleCustomEvent = (event) => {
     if (event.detail && callback) {

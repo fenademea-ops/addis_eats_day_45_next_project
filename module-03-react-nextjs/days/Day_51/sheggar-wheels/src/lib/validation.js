@@ -120,26 +120,58 @@ export function isCarAvailableForDates(
   endDate,
   existingBookings = [],
   carUnavailableDates = [],
-  excludeBookingId = null
+  excludeBookingId = null,
+  carObject = null
 ) {
   const rangeValidation = validateDateRange(startDate, endDate);
   if (!rangeValidation.valid) {
     return { available: false, reason: rangeValidation.error };
   }
 
-  // Check custom owner-blocked dates
-  if (Array.isArray(carUnavailableDates)) {
-    for (const blocked of carUnavailableDates) {
+  // If carObject or car is provided, check general operational and rent-out availability
+  if (carObject) {
+    if (carObject.status !== 'approved') {
+      return { available: false, reason: `Vehicle is ${carObject.status} and not approved for hire` };
+    }
+    if (
+      carObject.isAvailable === false ||
+      ['maintenance', 'temporarily_unavailable', 'unavailable', 'suspended'].includes(carObject.availabilityStatus)
+    ) {
+      const reason = carObject.unavailabilityReason ? `: ${carObject.unavailabilityReason}` : '';
+      const isMaint = carObject.availabilityStatus === 'maintenance';
+      return {
+        available: false,
+        reason: isMaint
+          ? `Vehicle is currently undergoing maintenance${reason}`
+          : `Vehicle is temporarily unavailable for rent${reason}`,
+      };
+    }
+    if (carObject.availableFrom && startDate < carObject.availableFrom) {
+      return { available: false, reason: `Vehicle is unavailable until ${carObject.availableFrom}` };
+    }
+  }
+
+  // Check custom owner-blocked dates or admin-blocked maintenance periods
+  const effectiveUnavailableDates =
+    Array.isArray(carUnavailableDates) && carUnavailableDates.length > 0
+      ? carUnavailableDates
+      : Array.isArray(carObject?.unavailableDates)
+        ? carObject.unavailableDates
+        : [];
+
+  if (Array.isArray(effectiveUnavailableDates)) {
+    for (const blocked of effectiveUnavailableDates) {
       if (typeof blocked === 'string') {
         // Single blocked date YYYY-MM-DD
         if (startDate <= blocked && endDate >= blocked) {
-          return { available: false, reason: `Car is marked unavailable on ${blocked}` };
+          return { available: false, reason: `Vehicle is marked unavailable on ${blocked}` };
         }
       } else if (blocked && blocked.startDate && blocked.endDate) {
         if (checkDateOverlap(startDate, endDate, blocked.startDate, blocked.endDate)) {
+          const reasonText = blocked.reason ? ` (${blocked.reason})` : '';
           return {
             available: false,
-            reason: `Car is unavailable between ${blocked.startDate} and ${blocked.endDate}`,
+            reason: `Vehicle is blocked from ${blocked.startDate} to ${blocked.endDate}${reasonText}`,
           };
         }
       }
@@ -158,7 +190,7 @@ export function isCarAvailableForDates(
   if (overlapping) {
     return {
       available: false,
-      reason: `Car is already booked from ${overlapping.startDate} to ${overlapping.endDate} (${overlapping.status})`,
+      reason: `Vehicle is already booked from ${overlapping.startDate} to ${overlapping.endDate} (${overlapping.status === 'in_progress' ? 'active rental' : overlapping.status})`,
     };
   }
 

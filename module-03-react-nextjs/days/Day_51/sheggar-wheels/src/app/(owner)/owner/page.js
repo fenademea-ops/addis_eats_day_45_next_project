@@ -258,7 +258,10 @@ export default function OwnerDashboardPage() {
             title="No vehicles in your fleet"
             description="List your first car to start accepting rentals from verified Addis Ababa drivers."
             actionLabel="Add Your First Vehicle"
-            onAction={() => (window.location.href = '/owner/cars/new')}
+            onAction={() => {
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+              window.location.href = '/owner/cars/new';
+            }}
             className="bg-slate-800/60 border-slate-700 text-slate-300"
           />
         ) : (

@@ -52,7 +52,10 @@ export default function OwnerCarsPage() {
           title="No vehicles listed yet"
           description="Start earning in Addis Ababa by listing your car for verified renters."
           actionLabel="Create First Listing"
-          onAction={() => (window.location.href = '/owner/cars/new')}
+          onAction={() => {
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+            window.location.href = '/owner/cars/new';
+          }}
           className="bg-slate-800/60 border-slate-700 text-slate-300"
         />
       ) : (

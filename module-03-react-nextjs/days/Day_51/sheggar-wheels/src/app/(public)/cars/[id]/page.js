@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   Share2,
   AlertCircle,
+  AlertTriangle,
   MessageSquare,
   Sparkles,
 } from 'lucide-react';
@@ -63,7 +64,9 @@ export default function CarDetailPage({ params }) {
       startDate,
       endDate,
       bookings,
-      car?.unavailableDates || []
+      car?.unavailableDates || [],
+      null,
+      car
     );
 
     if (!availability.available) {
@@ -238,11 +241,10 @@ export default function CarDetailPage({ params }) {
                   key={idx}
                   type="button"
                   onClick={() => setSelectedPhotoIndex(idx)}
-                  className={`relative w-24 h-16 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
-                    selectedPhotoIndex === idx
+                  className={`relative w-24 h-16 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${selectedPhotoIndex === idx
                       ? 'border-emerald-600 ring-2 ring-emerald-500/30'
                       : 'border-transparent opacity-70 hover:opacity-100'
-                  }`}
+                    }`}
                 >
                   <CarImageFallback src={photoUrl} alt="Thumbnail" fill />
                 </button>
@@ -409,6 +411,28 @@ export default function CarDetailPage({ params }) {
                 <StatusBadge status={car.status} type="car" />
               </div>
 
+              {/* Unavailability Banner */}
+              {(car.status !== 'approved' || car.isAvailable === false || ['maintenance', 'temporarily_unavailable', 'unavailable'].includes(car.availabilityStatus)) && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    {car.availabilityStatus === 'maintenance'
+                      ? 'Vehicle Currently in Maintenance'
+                      : car.status !== 'approved'
+                      ? `Listing ${car.status}`
+                      : 'Vehicle Temporarily Unavailable'}
+                  </div>
+                  <p className="text-[11px] text-amber-800/90 leading-relaxed">
+                    {car.unavailabilityReason || 'This vehicle is temporarily not accepting new bookings. Please select another vehicle or check back later.'}
+                  </p>
+                  {car.availableFrom && (
+                    <div className="text-[10px] font-semibold text-amber-900 mt-1">
+                      Expected return to service: {car.availableFrom}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Date selection */}
               <div className="space-y-3">
                 <div>
@@ -419,7 +443,8 @@ export default function CarDetailPage({ params }) {
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 min-h-[44px]"
+                    disabled={car.status !== 'approved' || car.isAvailable === false || ['maintenance', 'temporarily_unavailable', 'unavailable'].includes(car.availabilityStatus)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -431,7 +456,8 @@ export default function CarDetailPage({ params }) {
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 min-h-[44px]"
+                    disabled={car.status !== 'approved' || car.isAvailable === false || ['maintenance', 'temporarily_unavailable', 'unavailable'].includes(car.availabilityStatus)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -481,10 +507,19 @@ export default function CarDetailPage({ params }) {
                   size="lg"
                   className="w-full font-bold text-sm"
                   loading={bookingLoading}
-                  disabled={!dateCalculation.valid}
+                  disabled={
+                    !dateCalculation.valid ||
+                    car.status !== 'approved' ||
+                    car.isAvailable === false ||
+                    ['maintenance', 'temporarily_unavailable', 'unavailable'].includes(car.availabilityStatus)
+                  }
                   onClick={handleProceedToBooking}
                 >
-                  {currentUser ? 'Request Reservation' : 'Sign In to Reserve'}
+                  {car.status !== 'approved' || car.isAvailable === false || ['maintenance', 'temporarily_unavailable', 'unavailable'].includes(car.availabilityStatus)
+                    ? 'Unavailable for Booking'
+                    : currentUser
+                    ? 'Request Reservation'
+                    : 'Sign In to Reserve'}
                 </Button>
 
                 <p className="text-[11px] text-center text-slate-400">

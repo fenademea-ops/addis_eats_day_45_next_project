@@ -102,7 +102,7 @@ export default function CheckoutPage() {
         <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
           <div className="font-bold">TeleBirr Mock Reference:</div>
           <div className="font-mono text-sm tracking-widest text-emerald-700">
-            TB-DEMO-{Math.floor(10000 + Math.random() * 90000)}
+            TB-DEMO-{createdBookingId ? createdBookingId.slice(-6).toUpperCase() : '847291'}
           </div>
           <div className="text-[11px] text-emerald-600 pt-1">
             Amount: {formatETB(draft.total)} ETB

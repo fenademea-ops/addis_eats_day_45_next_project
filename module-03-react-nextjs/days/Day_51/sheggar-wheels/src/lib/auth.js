@@ -193,12 +193,22 @@ export function registerUser(payload) {
 }
 
 /**
- * Sign out current session and clear drafts
+ * Sign out current session and clear drafts.
+ * Dispatches a custom event so React/Next.js handles routing correctly
+ * regardless of the origin (localhost vs. network IP).
  */
 export function signOut() {
   removeStorage(STORAGE_KEYS.SESSION);
   removeStorage(STORAGE_KEYS.CHECKOUT_DRAFT);
   if (typeof window !== 'undefined') {
-    window.location.href = '/';
+    // Dispatch sign-out event; layout/RouteGuard listens and redirects via Next.js router
+    window.dispatchEvent(new CustomEvent('sheggar_signout'));
+    // Fallback: hard redirect after a tick in case no listener catches it
+    setTimeout(() => {
+      if (window.location.pathname !== '/') {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.href = '/';
+      }
+    }, 100);
   }
 }

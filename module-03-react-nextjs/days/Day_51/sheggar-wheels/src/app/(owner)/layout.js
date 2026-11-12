@@ -4,11 +4,13 @@ import OwnerSidebar from '@/components/navigation/OwnerSidebar';
 export default function OwnerLayout({ children }) {
   return (
     <RouteGuard requiredRole="owner">
-      <div className="flex-1 flex flex-col md:flex-row bg-slate-900 text-slate-100 min-h-[calc(100vh-2rem)]">
+      <div className="flex bg-slate-900 text-slate-100 min-h-screen">
         <OwnerSidebar />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-x-hidden">
-          {children}
-        </main>
+        <div className="flex-1 min-w-0 flex flex-col">
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+            {children}
+          </main>
+        </div>
       </div>
     </RouteGuard>
   );

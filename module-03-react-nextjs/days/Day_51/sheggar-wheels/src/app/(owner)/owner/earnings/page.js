@@ -194,8 +194,7 @@ export default function OwnerEarningsPage() {
       <div className="space-y-3">
         <h2 className="text-sm font-bold text-white">Monthly Financial Breakdown</h2>
         <div className="bg-slate-800/80 border border-slate-700 rounded-2xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
+          <div className="table-responsive">`n            <table className="w-full text-left text-xs text-slate-300">
               <thead className="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700">
                 <tr>
                   <th className="py-3 px-4">Billing Period</th>

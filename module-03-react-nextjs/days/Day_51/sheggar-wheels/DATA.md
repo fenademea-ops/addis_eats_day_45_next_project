@@ -14,6 +14,8 @@ This document specifies the persistence architecture, schema contracts, validati
 | `sw_reviews_v1` | `localStorage` | Verified reviews and owner replies | Durable across browser sessions |
 | `sw_disputes_v1` | `localStorage` | Customer claims and admin determinations | Durable across browser sessions |
 | `sw_announcements_v1` | `localStorage` | Global broadcast notices created by admins | Durable across browser sessions |
+| `sw_activity_v1` | `localStorage` | Administrative action audit log and history | Durable across browser sessions |
+| `sw_settings_v1` | `localStorage` | Platform commission, rental rules, and serviced zones | Durable across browser sessions |
 | `sw_session_v1` | `sessionStorage` | Active user session (`{ userId, signedInAt }`) | Scoped to active browser tab |
 | `sw_checkout_draft_v1` | `sessionStorage` | Selected dates, car summary, and fee total | Scoped to active checkout flow |
 

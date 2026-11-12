@@ -81,3 +81,22 @@ export function downloadCsv(filename, csvContent) {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Sanitize filename to prevent directory traversal or invalid characters
+ */
+export function sanitizeFileName(name) {
+  if (!name) return 'export';
+  return String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+/**
+ * Convenience method to generate and download CSV
+ */
+export function exportToCSV(rows, filename = 'export', headers = null) {
+  const csv = generateCsv(rows, headers);
+  const safeName = sanitizeFileName(filename).endsWith('.csv')
+    ? sanitizeFileName(filename)
+    : `${sanitizeFileName(filename)}.csv`;
+  downloadCsv(safeName, csv);
+}

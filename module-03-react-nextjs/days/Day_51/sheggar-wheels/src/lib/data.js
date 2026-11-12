@@ -6,9 +6,11 @@
  */
 
 import { STORAGE_KEYS, readStorage, writeStorage, generateId } from './storage';
+import { DEFAULT_SETTINGS } from './seed';
 import { canTransition, BOOKING_STATES } from './bookingMachine';
 import {
   validateDateRange,
+  checkDateOverlap,
   isCarAvailableForDates,
   isPositivePrice,
   validateRequiredFields,
@@ -34,8 +36,9 @@ export function getUserById(id) {
  * @param {string} adminUserId
  * @param {string} targetUserId
  * @param {'active'|'suspended'} newStatus
+ * @param {string} [reason]
  */
-export function updateUserStatus(adminUserId, targetUserId, newStatus) {
+export function updateUserStatus(adminUserId, targetUserId, newStatus, reason = '') {
   if (!adminUserId) return { success: false, error: 'Not signed in' };
 
   const admin = getUserById(adminUserId);
@@ -55,9 +58,34 @@ export function updateUserStatus(adminUserId, targetUserId, newStatus) {
     return { success: false, error: 'User not found' };
   }
 
-  users[targetIndex].status = newStatus;
+  const targetUser = users[targetIndex];
+  // Guard against suspending the last active administrator
+  if (hasRole(targetUser, 'admin') && newStatus === 'suspended') {
+    const activeAdmins = users.filter((u) => hasRole(u, 'admin') && u.status === 'active');
+    if (activeAdmins.length <= 1) {
+      return { success: false, error: 'Cannot suspend the last remaining active platform administrator' };
+    }
+  }
+
+  targetUser.status = newStatus;
+  targetUser.statusUpdatedAt = new Date().toISOString();
+  if (newStatus === 'suspended') {
+    targetUser.suspensionReason = reason || 'Administrative review';
+  } else {
+    delete targetUser.suspensionReason;
+  }
+
+  users[targetIndex] = targetUser;
   writeStorage(STORAGE_KEYS.USERS, users);
-  return { success: true, user: users[targetIndex] };
+
+  logAdminActivity(adminUserId, {
+    action: newStatus === 'suspended' ? 'user_suspended' : 'user_reinstated',
+    recordType: 'user',
+    recordId: targetUserId,
+    explanation: `${newStatus === 'suspended' ? 'Suspended' : 'Reinstated'} account for ${targetUser.name} (${targetUser.email}). Reason: ${reason || 'Admin action'}`,
+  });
+
+  return { success: true, user: targetUser };
 }
 
 // -------------------------------------------------------------
@@ -204,6 +232,7 @@ export function toggleCarActiveStatus(ownerUserId, carId) {
 
 /**
  * Moderate car listing (Admin only)
+ * Supported statuses: 'approved', 'rejected', 'suspended', 'inactive'
  */
 export function adminModerateCar(adminUserId, carId, status, moderationNotes = '') {
   if (!adminUserId) return { success: false, error: 'Not signed in' };
@@ -212,17 +241,341 @@ export function adminModerateCar(adminUserId, carId, status, moderationNotes = '
   if (!admin || !hasRole(admin, 'admin')) {
     return { success: false, error: 'Unauthorized: Admin role required' };
   }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  if (status === 'rejected' && (!moderationNotes || !moderationNotes.trim())) {
+    return { success: false, error: 'A rejection reason is required' };
+  }
 
   const cars = getCars();
   const index = cars.findIndex((c) => c.id === carId);
   if (index === -1) return { success: false, error: 'Car not found' };
 
-  cars[index].status = status; // 'approved' | 'rejected'
-  cars[index].moderationNotes = moderationNotes;
-  cars[index].moderatedAt = new Date().toISOString();
+  const targetCar = cars[index];
+  targetCar.status = status;
+  targetCar.moderationNotes = moderationNotes.trim();
+  targetCar.moderatedAt = new Date().toISOString();
+  targetCar.moderatedBy = adminUserId;
 
+  cars[index] = targetCar;
   writeStorage(STORAGE_KEYS.CARS, cars);
-  return { success: true, car: cars[index] };
+
+  logAdminActivity(adminUserId, {
+    action: `listing_${status}`,
+    recordType: 'car',
+    recordId: carId,
+    explanation: `Set listing status to "${status}" for ${targetCar.make} ${targetCar.model}. Notes: ${moderationNotes || 'Standard review'}`,
+  });
+
+  return { success: true, car: targetCar };
+}
+
+/**
+ * Admin direct edit of vehicle listing details (Admin only)
+ */
+export function adminEditCar(adminUserId, carId, updates) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const cars = getCars();
+  const index = cars.findIndex((c) => c.id === carId);
+  if (index === -1) return { success: false, error: 'Car not found' };
+
+  if (updates.pricePerDay !== undefined && !isPositivePrice(updates.pricePerDay)) {
+    return { success: false, error: 'Price must be a positive number' };
+  }
+
+  const car = cars[index];
+  const updated = {
+    ...car,
+    ...updates,
+    id: car.id,
+    ownerId: car.ownerId,
+    updatedAt: new Date().toISOString(),
+    lastEditedBy: adminUserId,
+  };
+
+  cars[index] = updated;
+  writeStorage(STORAGE_KEYS.CARS, cars);
+
+  logAdminActivity(adminUserId, {
+    action: 'listing_edited',
+    recordType: 'car',
+    recordId: carId,
+    explanation: `Admin modified details for ${updated.make} ${updated.model}.`,
+  });
+
+  return { success: true, car: updated };
+}
+
+/**
+ * Admin updates car rent-out and availability controls
+ * Enforces safety: Cannot mark available if active rental is currently in progress!
+ */
+export function adminUpdateCarRentOutStatus(adminUserId, carId, {
+  isAvailable,
+  availabilityStatus,
+  unavailabilityReason = '',
+  availableFrom = null,
+}) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const cars = getCars();
+  const index = cars.findIndex((c) => c.id === carId);
+  if (index === -1) return { success: false, error: 'Car not found' };
+
+  const car = cars[index];
+  const allBookings = getBookings().filter((b) => b.carId === carId);
+
+  // Safety check: Cannot mark available if vehicle is currently rented out
+  const activeTrip = allBookings.find((b) => b.status === BOOKING_STATES.IN_PROGRESS);
+  if (activeTrip && (isAvailable === true || availabilityStatus === 'available')) {
+    return {
+      success: false,
+      error: `Cannot mark available: Vehicle is currently on trip with active renter until ${activeTrip.endDate} (Booking #${activeTrip.id}). Custody must be returned and completed first.`,
+    };
+  }
+
+  const newStatus = availabilityStatus || (isAvailable ? 'available' : 'unavailable');
+  const finalIsAvailable = newStatus === 'available';
+
+  const updatedCar = {
+    ...car,
+    isAvailable: finalIsAvailable,
+    availabilityStatus: newStatus,
+    unavailabilityReason: !finalIsAvailable ? (unavailabilityReason?.trim() || '') : '',
+    availableFrom: !finalIsAvailable && availableFrom ? availableFrom : null,
+    updatedAt: new Date().toISOString(),
+    lastRentOutControlledBy: adminUserId,
+  };
+
+  cars[index] = updatedCar;
+  writeStorage(STORAGE_KEYS.CARS, cars);
+
+  logAdminActivity(adminUserId, {
+    action: 'car_rent_out_updated',
+    recordType: 'car',
+    recordId: carId,
+    explanation: `Updated rent-out status for ${car.make} ${car.model} to "${newStatus}" (Available: ${finalIsAvailable}). Reason: ${unavailabilityReason || 'None'}`,
+  });
+
+  return { success: true, car: updatedCar };
+}
+
+/**
+ * Admin blocks specific dates on a car calendar (e.g. maintenance, inspection, owner use)
+ * Validates no collision with active or confirmed customer reservations
+ */
+export function adminBlockCarDates(adminUserId, carId, { startDate, endDate, reason = '' }) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const dateCheck = validateDateRange(startDate, endDate);
+  if (!dateCheck.valid) {
+    return { success: false, error: dateCheck.error };
+  }
+
+  const cars = getCars();
+  const index = cars.findIndex((c) => c.id === carId);
+  if (index === -1) return { success: false, error: 'Car not found' };
+
+  const car = cars[index];
+  const allBookings = getBookings().filter((b) => b.carId === carId);
+
+  // Check collision with active or confirmed customer reservations
+  const conflicting = allBookings.find(
+    (b) =>
+      ['requested', 'confirmed', 'in_progress'].includes(b.status) &&
+      checkDateOverlap(startDate, endDate, b.startDate, b.endDate)
+  );
+
+  if (conflicting) {
+    return {
+      success: false,
+      error: `Conflict: Cannot block dates overlapping with ${conflicting.status} booking #${conflicting.id} (${conflicting.startDate} to ${conflicting.endDate}).`,
+    };
+  }
+
+  const newBlock = {
+    id: generateId('block'),
+    startDate,
+    endDate,
+    reason: (reason && reason.trim()) || 'Maintenance / Service',
+    createdAt: new Date().toISOString(),
+    createdBy: adminUserId,
+  };
+
+  const currentBlocked = Array.isArray(car.unavailableDates) ? car.unavailableDates : [];
+  car.unavailableDates = [...currentBlocked, newBlock];
+  car.updatedAt = new Date().toISOString();
+
+  cars[index] = car;
+  writeStorage(STORAGE_KEYS.CARS, cars);
+
+  logAdminActivity(adminUserId, {
+    action: 'car_dates_blocked',
+    recordType: 'car',
+    recordId: carId,
+    explanation: `Blocked dates ${startDate} to ${endDate} for ${car.make} ${car.model}. Reason: ${newBlock.reason}`,
+  });
+
+  return { success: true, car, block: newBlock };
+}
+
+/**
+ * Admin removes a blocked date range from a car calendar
+ */
+export function adminUnblockCarDates(adminUserId, carId, blockIdOrDate) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const cars = getCars();
+  const index = cars.findIndex((c) => c.id === carId);
+  if (index === -1) return { success: false, error: 'Car not found' };
+
+  const car = cars[index];
+  const currentBlocked = Array.isArray(car.unavailableDates) ? car.unavailableDates : [];
+
+  car.unavailableDates = currentBlocked.filter((b) => {
+    if (typeof b === 'string') return b !== blockIdOrDate;
+    if (b && typeof b === 'object') {
+      return b.id !== blockIdOrDate && b.startDate !== blockIdOrDate;
+    }
+    return true;
+  });
+
+  car.updatedAt = new Date().toISOString();
+  cars[index] = car;
+  writeStorage(STORAGE_KEYS.CARS, cars);
+
+  logAdminActivity(adminUserId, {
+    action: 'car_dates_unblocked',
+    recordType: 'car',
+    recordId: carId,
+    explanation: `Unblocked dates for ${car.make} ${car.model}.`,
+  });
+
+  return { success: true, car };
+}
+
+/**
+ * Determine exact rental availability state of a car
+ * Separate from listing moderation status!
+ * @param {string} carId
+ * @param {string} [targetDate] - YYYY-MM-DD
+ * @returns {{ state: string, label: string, isAvailable: boolean, activeBooking?: Object, upcomingBookings: Array, reason?: string, availableFrom?: string }}
+ */
+export function getCarRentalAvailability(carId, targetDate = null) {
+  const car = getCarById(carId);
+  if (!car) return { state: 'not_found', label: 'Not Found', isAvailable: false, upcomingBookings: [] };
+
+  if (car.status !== 'approved') {
+    return {
+      state: car.status, // 'pending', 'rejected', 'inactive', 'suspended'
+      label: car.status.charAt(0).toUpperCase() + car.status.slice(1).replace('_', ' '),
+      isAvailable: false,
+      upcomingBookings: [],
+    };
+  }
+
+  const todayStr = targetDate || new Date().toISOString().split('T')[0];
+  const allBookings = getBookings().filter((b) => b.carId === carId);
+
+  // 1. Check if currently rented out (trip in progress)
+  const activeTrip = allBookings.find((b) => b.status === BOOKING_STATES.IN_PROGRESS);
+  if (activeTrip) {
+    return {
+      state: 'rented',
+      label: 'Currently Rented Out',
+      isAvailable: false,
+      activeBooking: activeTrip,
+      upcomingBookings: allBookings.filter((b) => b.status === BOOKING_STATES.CONFIRMED && b.startDate > todayStr),
+    };
+  }
+
+  // 2. Check if reserved for today
+  const reservedToday = allBookings.find(
+    (b) => b.status === BOOKING_STATES.CONFIRMED && b.startDate <= todayStr && b.endDate >= todayStr
+  );
+  if (reservedToday) {
+    return {
+      state: 'reserved',
+      label: 'Reserved (Awaiting Pickup)',
+      isAvailable: false,
+      activeBooking: reservedToday,
+      upcomingBookings: allBookings.filter((b) => b.status === BOOKING_STATES.CONFIRMED && b.startDate > todayStr),
+    };
+  }
+
+  // 3. Check admin rent-out availability status / maintenance
+  if (
+    car.isAvailable === false ||
+    ['maintenance', 'temporarily_unavailable', 'unavailable'].includes(car.availabilityStatus)
+  ) {
+    const isMaint = car.availabilityStatus === 'maintenance';
+    return {
+      state: isMaint ? 'maintenance' : 'unavailable',
+      label: isMaint ? 'In Maintenance' : 'Temporarily Unavailable',
+      isAvailable: false,
+      reason: car.unavailabilityReason || '',
+      availableFrom: car.availableFrom || null,
+      upcomingBookings: allBookings.filter((b) => b.status === BOOKING_STATES.CONFIRMED && b.startDate > todayStr),
+    };
+  }
+
+  // 4. Check blackout / maintenance dates for today
+  if (car.unavailableDates && Array.isArray(car.unavailableDates)) {
+    const isBlockedToday = car.unavailableDates.some((d) => {
+      if (typeof d === 'string') return d === todayStr;
+      if (d && d.startDate && d.endDate) return todayStr >= d.startDate && todayStr <= d.endDate;
+      return false;
+    });
+    if (isBlockedToday) {
+      return {
+        state: 'maintenance',
+        label: 'In Maintenance / Blocked',
+        isAvailable: false,
+        upcomingBookings: allBookings.filter((b) => b.status === BOOKING_STATES.CONFIRMED && b.startDate > todayStr),
+      };
+    }
+  }
+
+  // 5. Check future reservations
+  const upcoming = allBookings.filter((b) => b.status === BOOKING_STATES.CONFIRMED && b.startDate > todayStr);
+
+  return {
+    state: 'available',
+    label: 'Available for Rent',
+    isAvailable: true,
+    upcomingBookings: upcoming,
+  };
 }
 
 // -------------------------------------------------------------
@@ -303,7 +656,9 @@ export function createBooking(renterUserId, { carId, startDate, endDate }) {
     startDate,
     endDate,
     existingBookings,
-    car.unavailableDates
+    car.unavailableDates,
+    null,
+    car
   );
   if (!availability.available) {
     return { success: false, error: availability.reason || 'Car is not available for chosen dates' };
@@ -617,7 +972,483 @@ export function resolveDispute(adminUserId, disputeId, resolutionNotes) {
   // Transition booking to resolved
   transitionBookingStatus(adminUserId, disputes[index].bookingId, BOOKING_STATES.RESOLVED);
 
+  logAdminActivity(adminUserId, {
+    action: 'dispute_resolved',
+    recordType: 'dispute',
+    recordId: disputeId,
+    explanation: `Resolved dispute #${disputeId}. Notes: ${resolutionNotes.trim()}`,
+  });
+
   return { success: true, dispute: disputes[index] };
+}
+
+// -------------------------------------------------------------
+// ADMIN BOOKING & FINANCIAL WORKFLOWS
+// -------------------------------------------------------------
+
+/**
+ * Admin cancel booking with required explanation (Admin only)
+ */
+export function adminCancelBooking(adminUserId, bookingId, cancellationReason) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  if (!cancellationReason || !cancellationReason.trim()) {
+    return { success: false, error: 'A cancellation reason is required' };
+  }
+
+  const booking = getBookingById(bookingId);
+  if (!booking) return { success: false, error: 'Booking not found' };
+
+  if (['completed', 'declined', 'cancelled', 'resolved'].includes(booking.status)) {
+    return { success: false, error: `Cannot cancel a booking in "${booking.status}" state` };
+  }
+
+  const updates = {
+    cancellationReason: `[Admin Policy] ${cancellationReason.trim()}`,
+  };
+
+  // If already paid mock, auto-flag for refund
+  if (booking.paymentStatus === 'paid_mock') {
+    updates.paymentStatus = 'refunded_mock';
+    updates.refundRef = `RF-DEMO-${Math.floor(10000 + Math.random() * 90000)}`;
+    updates.refundedAt = new Date().toISOString();
+  }
+
+  const res = transitionBookingStatus(adminUserId, bookingId, BOOKING_STATES.CANCELLED, updates);
+  if (res.success) {
+    logAdminActivity(adminUserId, {
+      action: 'booking_cancelled',
+      recordType: 'booking',
+      recordId: bookingId,
+      explanation: `Admin cancelled booking. Reason: ${cancellationReason.trim()}`,
+    });
+  }
+
+  return res;
+}
+
+/**
+ * Admin directly creates a new rent-out / booking agreement (walk-in or offline reservation)
+ */
+export function adminCreateBooking(adminUserId, {
+  carId,
+  renterId,
+  renterName,
+  renterEmail,
+  renterPhone,
+  startDate,
+  endDate,
+  status = BOOKING_STATES.CONFIRMED,
+  paymentStatus = 'paid_mock',
+  paymentMethod = 'TeleBirr Demo',
+  notes = '',
+}) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const car = getCarById(carId);
+  if (!car) return { success: false, error: 'Selected vehicle not found' };
+
+  const dateCheck = validateDateRange(startDate, endDate);
+  if (!dateCheck.valid) {
+    return { success: false, error: dateCheck.error };
+  }
+
+  const bookings = getBookings();
+  const availability = isCarAvailableForDates(
+    carId,
+    startDate,
+    endDate,
+    bookings,
+    car.unavailableDates || [],
+    null,
+    car
+  );
+  if (!availability.available) {
+    return { success: false, error: availability.reason || 'Vehicle is not available for selected dates' };
+  }
+
+  let finalRenterId = renterId;
+  if (!finalRenterId && renterName && renterName.trim()) {
+    const users = getUsers();
+    const existingUser = users.find((u) => u.email === renterEmail?.trim());
+    if (existingUser) {
+      finalRenterId = existingUser.id;
+    } else {
+      const newUser = {
+        id: generateId('user-renter'),
+        name: renterName.trim(),
+        email: renterEmail?.trim() || `walkin-${Date.now()}@sheggarwheels.et`,
+        phone: renterPhone?.trim() || '+251 91 000 0000',
+        roles: ['renter'],
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      };
+      users.push(newUser);
+      writeStorage(STORAGE_KEYS.USERS, users);
+      finalRenterId = newUser.id;
+    }
+  }
+
+  if (!finalRenterId) {
+    return { success: false, error: 'A renter must be selected or specified' };
+  }
+
+  const days = dateCheck.days;
+  const pricePerDay = car.pricePerDay;
+  const subtotal = days * pricePerDay;
+  const fee = Math.round(subtotal * 0.1);
+  const total = subtotal + fee;
+
+  const notesList = [];
+  if (notes && notes.trim()) {
+    notesList.push({
+      id: generateId('note'),
+      note: notes.trim(),
+      authorId: adminUserId,
+      authorName: admin.name || 'Administrator',
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  const newBooking = {
+    id: generateId('booking'),
+    carId,
+    renterId: finalRenterId,
+    ownerId: car.ownerId,
+    startDate,
+    endDate,
+    days,
+    pricePerDay,
+    subtotal,
+    fee,
+    total,
+    paymentStatus,
+    paymentRef: paymentStatus === 'paid_mock' ? `TB-WALKIN-${Math.floor(10000 + Math.random() * 90000)}` : null,
+    paymentMethod,
+    status: [BOOKING_STATES.CONFIRMED, BOOKING_STATES.IN_PROGRESS].includes(status) ? status : BOOKING_STATES.CONFIRMED,
+    adminNotesList: notesList,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdByAdmin: adminUserId,
+  };
+
+  bookings.unshift(newBooking);
+  writeStorage(STORAGE_KEYS.BOOKINGS, bookings);
+
+  logAdminActivity(adminUserId, {
+    action: 'booking_created_by_admin',
+    recordType: 'booking',
+    recordId: newBooking.id,
+    explanation: `Admin created manual rent-out agreement #${newBooking.id} for ${car.make} ${car.model}. Total: ETB ${total}`,
+  });
+
+  return { success: true, booking: newBooking };
+}
+
+/**
+ * Admin confirm/approve booking request (requested -> confirmed)
+ */
+export function adminConfirmBooking(adminUserId, bookingId, adminNotes = '') {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const booking = getBookingById(bookingId);
+  if (!booking) return { success: false, error: 'Booking not found' };
+
+  if (booking.status !== BOOKING_STATES.REQUESTED) {
+    return { success: false, error: `Cannot approve a booking in "${booking.status}" state` };
+  }
+
+  const updates = {};
+  if (adminNotes && adminNotes.trim()) {
+    updates.adminNotes = adminNotes.trim();
+  }
+
+  const res = transitionBookingStatus(adminUserId, bookingId, BOOKING_STATES.CONFIRMED, updates);
+  if (res.success) {
+    logAdminActivity(adminUserId, {
+      action: 'booking_confirmed',
+      recordType: 'booking',
+      recordId: bookingId,
+      explanation: `Admin approved and confirmed booking #${bookingId}.${adminNotes ? ` Note: ${adminNotes.trim()}` : ''}`,
+    });
+  }
+  return res;
+}
+
+/**
+ * Admin decline booking request (requested -> declined)
+ */
+export function adminDeclineBooking(adminUserId, bookingId, declineReason) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  if (!declineReason || !declineReason.trim()) {
+    return { success: false, error: 'A decline reason is required' };
+  }
+
+  const booking = getBookingById(bookingId);
+  if (!booking) return { success: false, error: 'Booking not found' };
+
+  if (booking.status !== BOOKING_STATES.REQUESTED) {
+    return { success: false, error: `Cannot decline a booking in "${booking.status}" state` };
+  }
+
+  const res = transitionBookingStatus(adminUserId, bookingId, BOOKING_STATES.DECLINED, {
+    declineReason: `[Admin Decision] ${declineReason.trim()}`,
+  });
+
+  if (res.success) {
+    logAdminActivity(adminUserId, {
+      action: 'booking_declined',
+      recordType: 'booking',
+      recordId: bookingId,
+      explanation: `Admin declined booking #${bookingId}. Reason: ${declineReason.trim()}`,
+    });
+  }
+  return res;
+}
+
+/**
+ * Admin add internal note to a booking / rental
+ */
+export function adminAddBookingNote(adminUserId, bookingId, noteText) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  if (!noteText || !noteText.trim()) {
+    return { success: false, error: 'Note text cannot be empty' };
+  }
+
+  const bookings = getBookings();
+  const index = bookings.findIndex((b) => b.id === bookingId);
+  if (index === -1) return { success: false, error: 'Booking not found' };
+
+  const booking = bookings[index];
+  const notesList = Array.isArray(booking.adminNotesList) ? [...booking.adminNotesList] : [];
+  const newNote = {
+    id: generateId('note'),
+    note: noteText.trim(),
+    authorId: adminUserId,
+    authorName: admin.name,
+    createdAt: new Date().toISOString(),
+  };
+  notesList.unshift(newNote);
+  booking.adminNotesList = notesList;
+  booking.updatedAt = new Date().toISOString();
+
+  bookings[index] = booking;
+  writeStorage(STORAGE_KEYS.BOOKINGS, bookings);
+
+  logAdminActivity(adminUserId, {
+    action: 'booking_note_added',
+    recordType: 'booking',
+    recordId: bookingId,
+    explanation: `Added internal admin note on booking #${bookingId}: "${noteText.trim().slice(0, 50)}..."`,
+  });
+
+  return { success: true, booking, note: newNote };
+}
+
+/**
+ * Admin start rental trip (confirmed -> in_progress)
+ */
+export function adminStartBooking(adminUserId, bookingId) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const res = transitionBookingStatus(adminUserId, bookingId, BOOKING_STATES.IN_PROGRESS);
+  if (res.success) {
+    logAdminActivity(adminUserId, {
+      action: 'booking_started',
+      recordType: 'booking',
+      recordId: bookingId,
+      explanation: 'Admin marked booking as in-progress (vehicle handed over).',
+    });
+  }
+  return res;
+}
+
+/**
+ * Admin complete rental trip (in_progress -> completed)
+ */
+export function adminCompleteBooking(adminUserId, bookingId) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const res = transitionBookingStatus(adminUserId, bookingId, BOOKING_STATES.COMPLETED, {
+    payoutStatus: 'payout_pending',
+  });
+
+  if (res.success) {
+    logAdminActivity(adminUserId, {
+      action: 'booking_completed',
+      recordType: 'booking',
+      recordId: bookingId,
+      explanation: 'Admin marked booking as completed (vehicle returned).',
+    });
+  }
+  return res;
+}
+
+/**
+ * Admin process simulated payout to host (Admin only)
+ */
+export function adminProcessPayout(adminUserId, bookingId) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const bookings = getBookings();
+  const index = bookings.findIndex((b) => b.id === bookingId);
+  if (index === -1) return { success: false, error: 'Booking not found' };
+
+  const booking = bookings[index];
+  if (booking.payoutStatus === 'paid_out') {
+    return { success: false, error: 'Payout has already been settled for this booking' };
+  }
+
+  const payoutRef = `PO-ETB-${Math.floor(10000 + Math.random() * 90000)}`;
+  booking.payoutStatus = 'paid_out';
+  booking.payoutRef = payoutRef;
+  booking.payoutAt = new Date().toISOString();
+  booking.payoutProcessedBy = adminUserId;
+
+  bookings[index] = booking;
+  writeStorage(STORAGE_KEYS.BOOKINGS, bookings);
+
+  logAdminActivity(adminUserId, {
+    action: 'payout_processed',
+    recordType: 'booking',
+    recordId: bookingId,
+    explanation: `Processed simulated host payout of ETB ${booking.subtotal} (Ref: ${payoutRef}).`,
+  });
+
+  return { success: true, booking };
+}
+
+/**
+ * Admin process simulated refund to renter (Admin only)
+ */
+export function adminProcessRefund(adminUserId, bookingId, refundReason) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const bookings = getBookings();
+  const index = bookings.findIndex((b) => b.id === bookingId);
+  if (index === -1) return { success: false, error: 'Booking not found' };
+
+  const booking = bookings[index];
+  if (booking.paymentStatus === 'refunded_mock') {
+    return { success: false, error: 'Booking has already been refunded' };
+  }
+
+  const refundRef = `RF-DEMO-${Math.floor(10000 + Math.random() * 90000)}`;
+  booking.paymentStatus = 'refunded_mock';
+  booking.refundRef = refundRef;
+  booking.refundReason = refundReason || 'Admin issued simulated refund';
+  booking.refundedAt = new Date().toISOString();
+
+  bookings[index] = booking;
+  writeStorage(STORAGE_KEYS.BOOKINGS, bookings);
+
+  logAdminActivity(adminUserId, {
+    action: 'refund_processed',
+    recordType: 'booking',
+    recordId: bookingId,
+    explanation: `Issued simulated refund of ETB ${booking.total} to renter (Ref: ${refundRef}).`,
+  });
+
+  return { success: true, booking };
+}
+
+/**
+ * Admin moderate review (published, hidden, flagged)
+ */
+export function adminModerateReview(adminUserId, reviewId, status, moderationReason = '') {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const reviews = getReviews();
+  const index = reviews.findIndex((r) => r.id === reviewId);
+  if (index === -1) return { success: false, error: 'Review not found' };
+
+  reviews[index].status = status; // 'published' | 'hidden' | 'flagged'
+  reviews[index].moderationReason = moderationReason.trim();
+  reviews[index].moderatedBy = adminUserId;
+  reviews[index].moderatedAt = new Date().toISOString();
+
+  writeStorage(STORAGE_KEYS.REVIEWS, reviews);
+
+  logAdminActivity(adminUserId, {
+    action: `review_${status}`,
+    recordType: 'review',
+    recordId: reviewId,
+    explanation: `Moderated review status to "${status}". Reason: ${moderationReason || 'Policy review'}`,
+  });
+
+  return { success: true, review: reviews[index] };
 }
 
 // -------------------------------------------------------------
@@ -640,6 +1471,9 @@ export function createAnnouncement(adminUserId, { title, message }) {
   if (!admin || !hasRole(admin, 'admin')) {
     return { success: false, error: 'Unauthorized: Admin role required' };
   }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
 
   if (!title || !message) {
     return { success: false, error: 'Title and message are required' };
@@ -657,7 +1491,48 @@ export function createAnnouncement(adminUserId, { title, message }) {
 
   announcements.unshift(newAnn);
   writeStorage(STORAGE_KEYS.ANNOUNCEMENTS, announcements);
+
+  logAdminActivity(adminUserId, {
+    action: 'announcement_published',
+    recordType: 'announcement',
+    recordId: newAnn.id,
+    explanation: `Published announcement: "${title.trim()}".`,
+  });
+
   return { success: true, announcement: newAnn };
+}
+
+export function editAnnouncement(adminUserId, announcementId, updates) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const announcements = getAnnouncements();
+  const index = announcements.findIndex((a) => a.id === announcementId);
+  if (index === -1) return { success: false, error: 'Announcement not found' };
+
+  announcements[index] = {
+    ...announcements[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  writeStorage(STORAGE_KEYS.ANNOUNCEMENTS, announcements);
+
+  logAdminActivity(adminUserId, {
+    action: 'announcement_edited',
+    recordType: 'announcement',
+    recordId: announcementId,
+    explanation: `Edited announcement #${announcementId}.`,
+  });
+
+  return { success: true, announcement: announcements[index] };
 }
 
 export function toggleAnnouncement(adminUserId, announcementId) {
@@ -667,6 +1542,9 @@ export function toggleAnnouncement(adminUserId, announcementId) {
   if (!admin || !hasRole(admin, 'admin')) {
     return { success: false, error: 'Unauthorized: Admin role required' };
   }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
 
   const announcements = getAnnouncements();
   const index = announcements.findIndex((a) => a.id === announcementId);
@@ -674,5 +1552,146 @@ export function toggleAnnouncement(adminUserId, announcementId) {
 
   announcements[index].active = !announcements[index].active;
   writeStorage(STORAGE_KEYS.ANNOUNCEMENTS, announcements);
+
+  logAdminActivity(adminUserId, {
+    action: announcements[index].active ? 'announcement_activated' : 'announcement_deactivated',
+    recordType: 'announcement',
+    recordId: announcementId,
+    explanation: `${announcements[index].active ? 'Activated' : 'Deactivated'} announcement #${announcementId}.`,
+  });
+
   return { success: true, announcement: announcements[index] };
+}
+
+export function deleteAnnouncement(adminUserId, announcementId) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  let announcements = getAnnouncements();
+  announcements = announcements.filter((a) => a.id !== announcementId);
+  writeStorage(STORAGE_KEYS.ANNOUNCEMENTS, announcements);
+
+  logAdminActivity(adminUserId, {
+    action: 'announcement_deleted',
+    recordType: 'announcement',
+    recordId: announcementId,
+    explanation: `Deleted announcement #${announcementId}.`,
+  });
+
+  return { success: true };
+}
+
+// -------------------------------------------------------------
+// ADMIN AUDIT LOG OPERATIONS
+// -------------------------------------------------------------
+
+export function getActivityLog() {
+  return readStorage(STORAGE_KEYS.ACTIVITY, []);
+}
+
+/**
+ * Record an action in the browser activity audit log
+ */
+export function logAdminActivity(adminUserId, { action, recordType, recordId, explanation }) {
+  if (!adminUserId) return;
+  const admin = getUserById(adminUserId);
+  const activities = getActivityLog();
+
+  const newEntry = {
+    id: generateId('act'),
+    action,
+    actorId: adminUserId,
+    actorName: admin?.name || 'Administrator',
+    recordType,
+    recordId,
+    timestamp: new Date().toISOString(),
+    explanation: explanation || `${action} on ${recordType} #${recordId}`,
+  };
+
+  activities.unshift(newEntry);
+  // Cap at 200 items to safeguard storage
+  writeStorage(STORAGE_KEYS.ACTIVITY, activities.slice(0, 200));
+  return newEntry;
+}
+
+// -------------------------------------------------------------
+// PLATFORM CONFIGURATION & SETTINGS
+// -------------------------------------------------------------
+
+export function getSettings() {
+  const current = readStorage(STORAGE_KEYS.SETTINGS, null);
+  return current ? { ...DEFAULT_SETTINGS, ...current } : DEFAULT_SETTINGS;
+}
+
+export function updateSettings(adminUserId, newSettings) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+  if (isUserSuspended(admin)) {
+    return { success: false, error: 'Your account is suspended' };
+  }
+
+  const commission = Number(newSettings.commissionPercent);
+  if (isNaN(commission) || commission < 0 || commission > 50) {
+    return { success: false, error: 'Commission rate must be between 0% and 50%' };
+  }
+
+  const minDays = Number(newSettings.minRentalDays);
+  const maxDays = Number(newSettings.maxRentalDays);
+  if (isNaN(minDays) || minDays < 1) {
+    return { success: false, error: 'Minimum rental duration must be at least 1 day' };
+  }
+  if (isNaN(maxDays) || maxDays < minDays) {
+    return { success: false, error: 'Maximum rental duration must be greater than minimum duration' };
+  }
+
+  const current = getSettings();
+  const merged = {
+    ...current,
+    ...newSettings,
+    commissionPercent: commission,
+    minRentalDays: minDays,
+    maxRentalDays: maxDays,
+    updatedAt: new Date().toISOString(),
+    updatedBy: adminUserId,
+  };
+
+  writeStorage(STORAGE_KEYS.SETTINGS, merged);
+
+  logAdminActivity(adminUserId, {
+    action: 'settings_updated',
+    recordType: 'settings',
+    recordId: 'global',
+    explanation: `Updated platform settings (commission: ${commission}%, min: ${minDays}d, max: ${maxDays}d).`,
+  });
+
+  return { success: true, settings: merged };
+}
+
+export function resetSettings(adminUserId) {
+  if (!adminUserId) return { success: false, error: 'Not signed in' };
+  const admin = getUserById(adminUserId);
+  if (!admin || !hasRole(admin, 'admin')) {
+    return { success: false, error: 'Unauthorized: Admin role required' };
+  }
+
+  writeStorage(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+
+  logAdminActivity(adminUserId, {
+    action: 'settings_reset',
+    recordType: 'settings',
+    recordId: 'global',
+    explanation: 'Reset platform settings to default parameters.',
+  });
+
+  return { success: true, settings: DEFAULT_SETTINGS };
 }

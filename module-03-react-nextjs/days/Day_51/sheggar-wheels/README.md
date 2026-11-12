@@ -34,13 +34,19 @@ The platform simulates full marketplace functionality directly in browser storag
 - **Public Host Replies**: Direct public replies to renter reviews to reinforce reputation.
 - **Dispute Tracking**: Full visibility into claims involving deposits, fuel discrepancy, or handover timing.
 
-### 3. Trust & Safety Super-Admin
-- **Platform Executive KPIs**: Total user counts, active vs suspended ratios, fleet size, bookings distribution by lifecycle state, total transacted GMV (ETB), and mock 10% platform revenue.
-- **Listings Moderation Queue**: Approve or reject vehicle submissions with mandatory administrative audit notes.
-- **User Governance**: Searchable user registry with instant account suspension or reinstatement.
-- **All Bookings Ledger**: Master audit table of every booking transition across the system with CSV export.
-- **Dispute Resolution Center**: Review contested claims between renters and owners, determine liability, and issue binding resolutions.
-- **Global Broadcast Banners**: Create, activate, or deactivate urgent announcements that broadcast to all site visitors.
+### 3. Trust & Safety Super-Admin (Complete Management Control Center)
+- **Executive Command Center (`/admin`)**: 18 real-time calculated KPIs (gross GMV, 10% platform take, host net disbursements, pending payouts, fleet breakdown, lifecycle status counts), 30/90-day date filters, Recharts booking volume & neighbourhood bar charts, and live activity audit preview.
+- **Vehicle Fleet Moderation (`/admin/listings`)**: Multi-attribute search and filtering by approval status, transmission, owner, and live rental availability. Features vehicle inspector modal (complete specs, photos, host contact, and booking history), approval, rejection with mandatory reason, suspension, reactivation, and details edit modal.
+- **Rental Operations & Booking Management (`/admin/bookings`)**: Master audit table of all 8 lifecycle statuses (`requested`, `confirmed`, `in_progress`, `completed`, `reviewed`, `cancelled`, `declined`, `disputed`, `resolved`). Schedule collision detector, dispatch start, return check-in, cancellation with mandatory justification, mock TeleBirr refund generation, and RFC 4180 CSV export.
+- **Rental Operations & Availability Matrix (`/admin/operations`)**: Real-time dispatch hub with 7-day pickup/return horizons, overdue vehicle check-in alerts, reservation collision warning, and fleet availability status matrix across all Addis Ababa zones.
+- **Financial Ledger & Payouts (`/admin/payments`)**: Financial audit trail itemizing TeleBirr references, gross amounts, 10% platform take, host net earnings, one-click simulated host payouts (`PO-ETB-XXXXX`), simulated refunds (`RF-DEMO-XXXXX`), and financial CSV exports.
+- **Reviews & Community Moderation (`/admin/reviews`)**: Star rating analysis, host replies, flagging inappropriate comments, hiding violations with required explanation, restoring reviews, and CSV exports.
+- **Trust & Safety Dispute Center (`/admin/disputes` & `/admin/disputes/[id]`)**: Full dispute dossier with attached booking details, renter/host claim statements, and formal binding resolution workflow.
+- **User Accounts & Governance (`/admin/users` & `/admin/users/[id]`)**: Searchable user registry with role audits, vehicle/trip counters, suspension modal requiring reason, self-suspension protection, and last active admin guard.
+- **Broadcast Announcements (`/admin/announcements`)**: Global alert banners with audience targeting (all users, renters only, hosts only), editing modal, activation toggling, and deletion.
+- **Executive Reports & Analytics (`/admin/reports`)**: Multi-category reporting (Financial GMV, Booking Lifecycle Distribution, Fleet Moderation Status, Addis District Turnover, User Governance) with date filtering and dedicated CSV download.
+- **Audit Trail & Admin Activity (`/admin/activity`)**: Chronological audit log recorded in `sw_activity_v1` tracking all administrative actions (approvals, rejections, edits, cancellations, payouts, refunds, dispute resolutions) with CSV export.
+- **Platform & Marketplace Settings (`/admin/settings`)**: Configurable platform commission rate (%), fixed booking fee (ETB), min/max rental durations, cancellation grace window, and serviced Addis Ababa neighbourhoods.
 
 ---
 

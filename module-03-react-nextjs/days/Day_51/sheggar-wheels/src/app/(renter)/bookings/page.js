@@ -170,7 +170,10 @@ export default function RenterBookingsPage() {
           title="No reservations in this category"
           description="You don't have any trips matching the selected filter tab."
           actionLabel="Browse Available Cars"
-          onAction={() => (window.location.href = '/cars')}
+          onAction={() => {
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+            window.location.href = '/cars';
+          }}
         />
       ) : (
         <div className="space-y-4">

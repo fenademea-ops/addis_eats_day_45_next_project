@@ -363,11 +363,10 @@ function CarsContent() {
                       setTransmission(t);
                       handleFilterChange('transmission', t);
                     }}
-                    className={`py-1.5 px-2 text-xs font-medium rounded-lg border cursor-pointer min-h-[40px] flex items-center justify-center transition-all ${
-                      transmission === t
+                    className={`py-1.5 px-2 text-xs font-medium rounded-lg border cursor-pointer min-h-[40px] flex items-center justify-center transition-all ${transmission === t
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     {t}
                   </button>
@@ -440,53 +439,69 @@ function CarsContent() {
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {paginatedCars.map((car) => (
-                <Card key={car.id} hover className="flex flex-col group h-full">
-                  <div className="relative h-48 w-full bg-slate-100 overflow-hidden">
-                    <CarImageFallback
-                      src={car.photos[0]}
-                      alt={`${car.make} ${car.model}`}
-                      fill
-                      className="group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-xs text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-emerald-400" />
-                      {car.neighbourhood}
-                    </div>
-                  </div>
+              {paginatedCars.map((car) => {
+                const isMaintenance = car.availabilityStatus === 'maintenance';
+                const isUnavailable = car.isAvailable === false || ['temporarily_unavailable', 'unavailable'].includes(car.availabilityStatus);
 
-                  <div className="p-4 flex-1 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                        <span>
-                          {car.year} • {car.transmission}
-                        </span>
-                        <span>{car.seats} Seats</span>
+                return (
+                  <Card key={car.id} hover className="flex flex-col group h-full">
+                    <div className="relative h-48 w-full bg-slate-100 overflow-hidden">
+                      <CarImageFallback
+                        src={car.photos[0]}
+                        alt={`${car.make} ${car.model}`}
+                        fill
+                        className="group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-xs text-white text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-emerald-400" />
+                        {car.neighbourhood}
                       </div>
-                      <h3 className="text-base font-bold text-slate-900 truncate">
-                        {car.make} {car.model}
-                      </h3>
-                      <p className="text-xs text-slate-500 line-clamp-2 mt-1.5">
-                        {car.description}
-                      </p>
-                    </div>
 
-                    <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
-                      <div>
-                        <span className="text-[11px] text-slate-400">Daily rate</span>
-                        <div className="text-base font-extrabold text-emerald-600">
-                          {formatETB(car.pricePerDay)}
+                      {isMaintenance && (
+                        <div className="absolute top-3 right-3 bg-amber-500/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
+                          Maintenance
                         </div>
-                      </div>
-                      <Link href={`/cars/${car.id}`}>
-                        <Button variant="primary" size="sm">
-                          View & Book
-                        </Button>
-                      </Link>
+                      )}
+                      {!isMaintenance && isUnavailable && (
+                        <div className="absolute top-3 right-3 bg-rose-500/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
+                          Unavailable
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </Card>
-              ))}
+
+                    <div className="p-4 flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                          <span>
+                            {car.year} • {car.transmission}
+                          </span>
+                          <span>{car.seats} Seats</span>
+                        </div>
+                        <h3 className="text-base font-bold text-slate-900 truncate">
+                          {car.make} {car.model}
+                        </h3>
+                        <p className="text-xs text-slate-500 line-clamp-2 mt-1.5">
+                          {car.description}
+                        </p>
+                      </div>
+
+                      <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                        <div>
+                          <span className="text-[11px] text-slate-400">Daily rate</span>
+                          <div className="text-base font-extrabold text-emerald-600">
+                            {formatETB(car.pricePerDay)}
+                          </div>
+                        </div>
+                        <Link href={`/cars/${car.id}`}>
+                          <Button variant={isMaintenance || isUnavailable ? 'secondary' : 'primary'} size="sm">
+                            {isMaintenance || isUnavailable ? 'View Details' : 'View & Book'}
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
           )}
 

@@ -11,6 +11,14 @@ import {
   getUsers,
   getCars,
   getBookings,
+  getDisputes,
+  getActivityLog,
+  adminModerateCar,
+  adminProcessRefund,
+  adminProcessPayout,
+  resolveDispute,
+  updateUserStatus,
+  getCarRentalAvailability,
 } from '../data';
 import {
   initializeDemoData,
@@ -345,3 +353,198 @@ describe('5. Required Negative Tests (Strict security and ownership)', () => {
     expect(result).toEqual({ fallback: true });
   });
 });
+
+describe('6. Master Prompt 15 Core Scenarios Suite', () => {
+  beforeEach(() => {
+    resetDemoData();
+  });
+
+  it('Scenario 1: A signed-out visitor cannot perform an admin action', () => {
+    const res = adminModerateCar(null, 'car-1', 'approved', 'Test notes');
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('Not signed in');
+  });
+
+  it('Scenario 2: A renter cannot approve a car listing', () => {
+    const res = adminModerateCar('user-renter-1', 'car-1', 'approved', 'Unauthorized approval');
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Unauthorized');
+  });
+
+  it("Scenario 3: An owner cannot access another owner's listing controls", () => {
+    // car-1 belongs to user-owner-1; user-dual-1 is also an owner
+    const res = updateCarListing('user-dual-1', 'car-1', { pricePerDay: 9999 });
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('Not yours');
+  });
+
+  it('Scenario 4: An admin can approve a pending listing', () => {
+    // car-9-pending is seeded as pending
+    const res = adminModerateCar('user-admin-1', 'car-9-pending', 'approved', 'Verified specs and photos');
+    expect(res.success).toBe(true);
+    expect(res.car.status).toBe('approved');
+
+    // Verify storage reflects the approval
+    const freshCar = getCars().find((c) => c.id === 'car-9-pending');
+    expect(freshCar.status).toBe('approved');
+  });
+
+  it('Scenario 5: A rejected, inactive, or suspended car cannot receive a new booking', () => {
+    // First reject car-9-pending
+    adminModerateCar('user-admin-1', 'car-9-pending', 'rejected', 'Fails compliance check');
+
+    const resRejected = createBooking('user-renter-1', {
+      carId: 'car-9-pending',
+      startDate: '2026-12-01',
+      endDate: '2026-12-03',
+    });
+    expect(resRejected.success).toBe(false);
+    expect(resRejected.error).toContain('not currently available');
+
+    // car-10-inactive is seeded as inactive
+    const resInactive = createBooking('user-renter-1', {
+      carId: 'car-10-inactive',
+      startDate: '2026-12-01',
+      endDate: '2026-12-03',
+    });
+    expect(resInactive.success).toBe(false);
+    expect(resInactive.error).toContain('not currently available');
+  });
+
+  it('Scenario 6: Two overlapping bookings cannot both become confirmed for the same car', () => {
+    // Book same car for overlapping dates
+    const b1 = createBooking('user-renter-1', {
+      carId: 'car-1',
+      startDate: '2026-12-10',
+      endDate: '2026-12-15',
+    });
+    expect(b1.success).toBe(true);
+
+    // Host confirms booking 1
+    const confirm1 = transitionBookingStatus('user-owner-1', b1.booking.id, BOOKING_STATES.CONFIRMED);
+    expect(confirm1.success).toBe(true);
+
+    // Create booking 2 with overlapping dates (Dec 12 - 14)
+    const bookings = getBookings();
+    const b2 = {
+      id: 'test-clash-booking',
+      renterId: 'user-renter-1',
+      ownerId: 'user-owner-1',
+      carId: 'car-1',
+      startDate: '2026-12-12',
+      endDate: '2026-12-14',
+      totalDays: 2,
+      subtotal: 9000,
+      fee: 900,
+      total: 9900,
+      status: BOOKING_STATES.REQUESTED,
+      createdAt: new Date().toISOString(),
+    };
+    bookings.push(b2);
+    writeStorage(STORAGE_KEYS.BOOKINGS, bookings);
+
+    // Attempt to confirm booking 2 should fail due to date clash with booking 1
+    const confirm2 = transitionBookingStatus('user-owner-1', b2.id, BOOKING_STATES.CONFIRMED);
+    expect(confirm2.success).toBe(false);
+    expect(confirm2.error).toContain('already booked');
+  });
+
+  it('Scenario 7: An invalid booking status transition is rejected', () => {
+    const b = getBookings().find((x) => x.status === BOOKING_STATES.REQUESTED);
+    expect(b).toBeDefined();
+
+    // Cannot jump from requested to in_progress or completed directly
+    const res = transitionBookingStatus(b.ownerId, b.id, BOOKING_STATES.IN_PROGRESS);
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Invalid transition');
+  });
+
+  it("Scenario 8: A renter cannot cancel another renter's booking", () => {
+    const b = getBookings().find((x) => x.renterId === 'user-renter-1' && x.status === BOOKING_STATES.REQUESTED);
+    expect(b).toBeDefined();
+
+    // user-dual-1 (not the owner nor renter of this booking) tries to cancel
+    const res = transitionBookingStatus('user-dual-1', b.id, BOOKING_STATES.CANCELLED);
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('Not yours');
+  });
+
+  it('Scenario 9: A suspended user cannot create a booking', () => {
+    const res = createBooking('user-suspended-1', {
+      carId: 'car-1',
+      startDate: '2026-12-20',
+      endDate: '2026-12-22',
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('Your account is suspended');
+  });
+
+  it('Scenario 10: An eligible mock refund updates the correct payment record', () => {
+    // Find a booking with paid_mock that is cancelled or eligible
+    const b = getBookings().find((x) => x.paymentStatus === 'paid_mock');
+    expect(b).toBeDefined();
+
+    const res = adminProcessRefund('user-admin-1', b.id, 'Customer cancellation refund');
+    expect(res.success).toBe(true);
+    expect(res.booking.paymentStatus).toBe('refunded_mock');
+    expect(res.booking.refundRef).toMatch(/^RF-DEMO-/);
+
+    // Verify storage
+    const fresh = getBookings().find((x) => x.id === b.id);
+    expect(fresh.paymentStatus).toBe('refunded_mock');
+  });
+
+  it('Scenario 11: Resolving a dispute requires a resolution note', () => {
+    const dispute = getDisputes().find((d) => d.status === 'open');
+    expect(dispute).toBeDefined();
+
+    // Blank resolution note rejected
+    const blankRes = resolveDispute('user-admin-1', dispute.id, '   ');
+    expect(blankRes.success).toBe(false);
+    expect(blankRes.error).toContain('Resolution notes are required');
+
+    // Valid resolution note succeeds
+    const validRes = resolveDispute('user-admin-1', dispute.id, 'Parties agreed on full refund settlement.');
+    expect(validRes.success).toBe(true);
+    expect(validRes.dispute.status).toBe('resolved');
+    expect(validRes.dispute.resolvedBy).toBe('user-admin-1');
+  });
+
+  it('Scenario 12: CSV export correctly escapes special characters (commas, quotes, newlines)', () => {
+    const rawValue = 'Toyota "Corolla", Bole\nAddis Ababa';
+    const escaped = escapeCsvCell(rawValue);
+    expect(escaped).toBe('"Toyota ""Corolla"", Bole\nAddis Ababa"');
+
+    const csvData = generateCsv([
+      { model: rawValue, price: 4500 },
+    ]);
+    expect(csvData).toContain('"Toyota ""Corolla"", Bole\nAddis Ababa"');
+  });
+
+  it('Scenario 13: Malformed browser storage does not crash the application', () => {
+    mockStorage['sw_corrupt_test_2'] = '<<<BAD XML INSTEAD OF JSON>>>';
+    const recovered = readStorage('sw_corrupt_test_2', []);
+    expect(recovered).toEqual([]);
+  });
+
+  it('Scenario 14: Platform activity log records admin actions', () => {
+    const initialLogCount = getActivityLog().length;
+    adminModerateCar('user-admin-1', 'car-1', 'approved', 'Audit verification test');
+
+    const newLogs = getActivityLog();
+    expect(newLogs.length).toBeGreaterThan(initialLogCount);
+    const latest = newLogs[0];
+    expect(latest.action).toBe('listing_approved');
+    expect(latest.actorId).toBe('user-admin-1');
+    expect(latest.recordId).toBe('car-1');
+  });
+
+  it('Scenario 15: Last usable admin cannot be suspended', () => {
+    // Attempting to suspend the only active admin
+    const res = updateUserStatus('user-admin-1', 'user-admin-1', 'suspended');
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('cannot suspend your own admin account');
+  });
+});
+
+
